@@ -42,7 +42,6 @@ main{padding:14px 16px}
 .task.done .check{background:var(--navy);border-color:var(--navy)}
 .bar{flex:none;width:4px;border-radius:4px;align-self:stretch}
 .body{flex:1;min-width:0}
-.title{font-weight:600;font-size:16px;line-height:1.3}
 .title-row{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
 .title-text{font-weight:600;font-size:16px;line-height:1.3;outline:none;min-width:20px}
 .title-text:focus{background:#fff;border-radius:6px;padding:2px 5px;box-shadow:0 0 0 2px #dcd7ce}
@@ -65,7 +64,7 @@ main{padding:14px 16px}
 .sheet-bg.open{display:block}
 .sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:24px 24px 0 0;padding:14px 20px 34px;max-height:88vh;overflow:auto}
 .handle{width:44px;height:5px;background:#ddd;border-radius:5px;margin:0 auto 14px}
-.sheet h2{font-size:19px;margin:6px 0 14px}
+.sheet h2{font-size:19px;margin:6px 0 14px;position:relative}
 label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px}
 input,select,textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:15px;font-family:inherit;background:#faf9f6;color:var(--ink)}
 textarea{min-height:70px;resize:vertical}
@@ -77,15 +76,6 @@ textarea{min-height:70px;resize:vertical}
 .list-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;gap:8px}
 .list-item small{color:var(--muted);display:block;font-size:12px}
 .list-item button{background:none;border:none;color:#b83232;font-size:13px;cursor:pointer;font-family:inherit}
-.tpl-day{margin-top:14px;font-weight:600;font-size:14px}
-.tpl-card{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px;background:#faf9f6}
-.tpl-top{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.tpl-top input,.tpl-top select{padding:8px;font-size:13px;border-radius:9px;min-width:0}
-.tpl-top .tt{flex:1 1 92px}
-.tpl-top .tcourse{flex:1 1 108px}
-.tpl-top .tdur{flex:0 0 54px;text-align:center}
-.tpl-top .tdel{flex:none;background:none;border:none;color:#b83232;font-size:17px;cursor:pointer;padding:2px 4px}
-.tpl-card .ttitle{margin-top:8px;width:100%;padding:8px;font-size:13px;border-radius:9px;border:1px solid var(--line)}
 .small{font-size:12.5px;color:var(--muted);line-height:1.6}
 .wheelpicker{position:relative;display:flex;align-items:center;height:160px;background:#faf9f6;border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .wheel-highlight{position:absolute;left:6px;right:6px;top:60px;height:40px;background:#eee9df;border-radius:10px;pointer-events:none;z-index:0}
@@ -95,9 +85,21 @@ textarea{min-height:70px;resize:vertical}
 .wheel-item{height:40px;display:flex;align-items:center;justify-content:center;font-size:21px;color:#c4beb3;scroll-snap-align:center;font-variant-numeric:tabular-nums;transition:color .15s}
 .wheel-item.sel{color:var(--ink);font-weight:700}
 .wheel-unit{width:26px;text-align:center;color:var(--muted);font-size:13px;z-index:1}
-.cap{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-.cap div{text-align:center;font-size:12px;color:var(--muted)}
-.cap input{padding:8px 4px;text-align:center;font-size:13px}
+.dow-toggle{display:flex;gap:6px;margin-top:6px}
+.dow-toggle button{flex:1;padding:10px 0;border-radius:10px;border:1px solid var(--line);background:#faf9f6;font-family:inherit;font-size:13px;color:var(--muted);cursor:pointer}
+.dow-toggle button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.mini-add{position:absolute;right:0;top:0;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:5px 10px;background:#fff;color:var(--ink);cursor:pointer;font-family:inherit;font-weight:400}
+.rec-card{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px;background:#faf9f6}
+.rec-top{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rec-top select,.rec-top input{padding:8px;font-size:12.5px;border-radius:9px;min-width:0}
+.rec-top .rcourse{flex:1 1 96px}
+.rec-top .rdue{flex:1 1 78px}
+.rec-top .rhr,.rec-top .rmin{flex:0 0 52px;text-align:center}
+.rec-top .rdel{flex:none;background:none;border:none;color:#b83232;font-size:17px;cursor:pointer;padding:2px 4px}
+.rec-title{margin-top:8px;width:100%;padding:8px;font-size:13px;border-radius:9px;border:1px solid var(--line)}
+.rec-bottom{display:flex;align-items:center;margin-top:8px;font-size:12.5px;color:var(--muted)}
+.same-toggle{display:flex;align-items:center;gap:6px;cursor:pointer}
+.same-toggle input{width:16px;height:16px;margin:0}
 </style>
 </head>
 <body>
@@ -125,12 +127,12 @@ textarea{min-height:70px;resize:vertical}
   <button class="primary" onclick="openAddAssign()">+ 과제 추가</button>
 </div>
 
-<!-- 과제 추가 -->
+<!-- 과제 추가 (마감일 기반, 요일도 자동 배정) -->
 <div class="sheet-bg" id="addAssign" onclick="bgClose(event,'addAssign')">
   <div class="sheet">
     <div class="handle"></div>
     <h2>과제 추가</h2>
-    <p class="small">마감일과 예상 시간을 넣으면 마감 전 여유 있는 날에 자동으로 나눠서 배정돼요. (하루 최대 2시간씩)</p>
+    <p class="small">마감일과 예상 시간만 넣으면 어느 요일 몇 시부터 할지 전부 자동으로 배정돼요.</p>
     <label>과제 이름</label><input id="aTitle" placeholder="예: Roadmap Exercise 초안">
     <div class="row">
       <div><label>과목</label><select id="aCourse"></select></div>
@@ -154,15 +156,21 @@ textarea{min-height:70px;resize:vertical}
   </div>
 </div>
 
-<!-- 이 날 할 일 추가 -->
+<!-- 이 날 할 일 추가 (날짜는 고정, 시간은 자동 배치) -->
 <div class="sheet-bg" id="addTask" onclick="bgClose(event,'addTask')">
   <div class="sheet">
     <div class="handle"></div>
     <h2>이 날 할 일 추가</h2>
+    <p class="small">이 날짜에 고정되고, 시작 시간부터 순서대로 자동 배치돼요.</p>
     <label>할 일</label><input id="tTitle" placeholder="예: 오피스아워 질문 정리">
-    <div class="row">
-      <div><label>과목</label><select id="tCourse"></select></div>
-      <div><label>시간</label><input id="tTime" type="time" value="15:30"></div>
+    <label>과목</label><select id="tCourse"></select>
+    <label>예상 소요 시간</label>
+    <div class="wheelpicker">
+      <div class="wheel-highlight"></div>
+      <div class="wheel-col" id="wheelHourX"></div>
+      <div class="wheel-unit">시간</div>
+      <div class="wheel-col" id="wheelMinX"></div>
+      <div class="wheel-unit">분</div>
     </div>
     <label>메모</label><textarea id="tMemo"></textarea>
     <div class="btns"><button class="btn-ghost" onclick="closeSheet('addTask')">취소</button><button class="btn-navy" onclick="saveTask()">추가</button></div>
@@ -183,13 +191,19 @@ textarea{min-height:70px;resize:vertical}
 <div class="sheet-bg" id="settingsSheet" onclick="bgClose(event,'settingsSheet')">
   <div class="sheet">
     <div class="handle"></div>
-    <h2>주간 계획 편집</h2>
-    <p class="small">매주 반복되는 기본 할 일이에요. 요일별로 시간·이름·분(分)을 바꾸면 그 요일 전체에 적용돼요.</p>
-    <div id="tplEditor"></div>
-    <h2 style="margin-top:26px">요일별 과제 여유 시간</h2>
-    <p class="small">기본 계획 외에 과제에 쓸 수 있는 시간(분). 과제는 이 범위 안에서만 배정돼요.</p>
-    <div class="cap" id="capEditor"></div>
-    <h2 style="margin-top:26px">백업</h2>
+    <h2>공부 시간 설정</h2>
+    <div class="row">
+      <div><label>공부 시작 시간</label><input type="time" id="setStart"></div>
+      <div><label>마감 마지노선 (다음날 새벽)</label><input type="time" id="setCutoff"></div>
+    </div>
+    <label>공부하는 요일</label>
+    <div class="dow-toggle" id="dowToggle"></div>
+
+    <h2 style="margin-top:28px">매주 반복 항목<button class="mini-add" onclick="addRecurring()">+ 추가</button></h2>
+    <p class="small">마감 요일까지 자동으로 요일·시간이 배치돼요. "당일에만"을 켜면 복습처럼 그 요일에만, 끄면 예습처럼 마감 요일 전 여유 있는 날에 배치돼요.</p>
+    <div id="recEditor"></div>
+
+    <h2 style="margin-top:28px">백업</h2>
     <div class="row">
       <button class="btn-ghost" style="border:none;border-radius:12px;padding:12px;font-family:inherit" onclick="exportJSON()">JSON 내보내기</button>
       <button class="btn-ghost" style="border:none;border-radius:12px;padding:12px;font-family:inherit" onclick="document.getElementById('importFile').click()">JSON 불러오기</button>
@@ -200,7 +214,7 @@ textarea{min-height:70px;resize:vertical}
 </div>
 
 <script>
-/* ---------- 데이터 ---------- */
+/* ---------- 기본 데이터 ---------- */
 const COURSES = {
   torts:{name:"Torts",color:"var(--torts)"},
   contracts:{name:"Contracts",color:"var(--contracts)"},
@@ -209,91 +223,206 @@ const COURSES = {
   mr:{name:"Moral Reasoning",color:"var(--mr)"},
   etc:{name:"기타",color:"var(--etc)"}
 };
-const CLASSES = { // 0=일 1=월 ...
+const CLASSES = {
   1:[["torts","9:00","MSL 235"],["contracts","10:30","MSL 235"],["civpro","1:30 pm","MSL 321"]],
   2:[["ls","8:55","SCH 314"],["mr","10:30","Rm 321/235"],["civpro","1:30 pm","MSL 321"]],
   3:[["torts","9:00","MSL 235"],["contracts","10:30","MSL 235"]],
   4:[["ls","8:55","SCH 314"],["torts","10:30","MSL 235"],["civpro","1:30 pm","MSL 321"]],
   5:[["contracts","10:30","MSL 235"]]
 };
-// 기본 주간 계획 (dow, time, dur(min), course, title, memo)
-const DEFAULT_TEMPLATE = [
-  [1,"15:30",60,"etc","복습 (오늘 수업 3과목)","Torts·Contracts·CivPro 각 20분 — 교수님 질문 적기"],
-  [1,"16:30",120,"civpro","예습 (교재+판례) — 화요일 수업",""],
-  [1,"19:30",90,"ls","예습 — 화요일 Lawyering Skills + Moral Reasoning",""],
-  [1,"21:00",180,"torts","예습 (교재+판례) — 수요일 수업",""],
-  [2,"15:30",30,"civpro","복습 (판례정리)",""],
-  [2,"16:00",150,"contracts","예습 (교재+판례) — 수요일 수업","단어장 · 양측 논거까지"],
-  [2,"19:30",90,"contracts","콜드콜 스크립트",""],
-  [2,"21:00",90,"torts","콜드콜 스크립트 + 마무리",""],
-  [3,"13:00",30,"etc","복습 (Torts·Contracts)","1:30–2:45 Torts 오피스아워 가능"],
-  [3,"15:00",150,"torts","예습 (교재+판례) — 목요일 수업",""],
-  [3,"18:30",120,"civpro","예습 (교재+판례) — 목요일 수업",""],
-  [3,"20:30",60,"ls","예습 — 목요일 Lawyering Skills",""],
-  [3,"21:30",60,"etc","콜드콜 스크립트 (Torts + CivPro)",""],
-  [4,"15:30",30,"etc","복습 (Torts·CivPro)",""],
-  [4,"16:00",150,"contracts","예습 (교재+판례) — 금요일 수업",""],
-  [4,"19:30",90,"contracts","콜드콜 스크립트 + 단어장",""],
-  [4,"21:00",120,"etc","주간 정리 — 케이스별 룰 한 줄씩 아웃라인에",""],
-  [5,"13:00",30,"contracts","복습 (판례정리)","Grenardo 오피스아워 12–1:30"],
-  [5,"13:30",150,"torts","예습 (교재+판례) — 월요일 수업",""],
-  [5,"16:30",120,"contracts","예습 (교재+판례) — 월요일 수업",""],
-  [5,"19:30",90,"civpro","예습 (교재+판례) — 월요일 수업",""],
-  [5,"21:00",60,"etc","콜드콜 스크립트 3개 (Torts·Contracts·CivPro)",""],
-  [0,"20:00",60,"etc","(선택) 월요일 스크립트 한 번 읽기 + 가방 챙기기",""]
-].map((t,i)=>({id:"tpl"+i,dow:t[0],time:t[1],dur:t[2],course:t[3],title:t[4],memo:t[5]}));
-const DEFAULT_CAP = {0:60,1:60,2:90,3:120,4:120,5:120,6:0};
+const DOW=["일","월","화","수","목","금","토"];
 
-const KEY="onel_daily_v1";
+// 매주 반복 항목: dueDow = 이 항목이 대비하는 수업 요일(마감), sameDay = 그 요일에만(복습형) / false면 마감 전 여유 날에 배치(예습형)
+const DEFAULT_RECURRING = [
+  {title:"복습 (오늘 수업 3과목)", course:"etc", estMin:60, dueDow:1, sameDay:true, memo:"Torts·Contracts·CivPro 각 20분 — 교수님 질문 적기"},
+  {title:"예습 (교재+판례) — 화요일 CivPro 수업", course:"civpro", estMin:120, dueDow:2, sameDay:false, memo:""},
+  {title:"예습 — 화요일 Lawyering Skills + Moral Reasoning", course:"ls", estMin:90, dueDow:2, sameDay:false, memo:""},
+  {title:"예습 (교재+판례) — 수요일 Torts 수업", course:"torts", estMin:180, dueDow:3, sameDay:false, memo:""},
+  {title:"복습 (판례정리)", course:"civpro", estMin:30, dueDow:2, sameDay:true, memo:""},
+  {title:"예습 (교재+판례) — 수요일 Contracts 수업", course:"contracts", estMin:150, dueDow:3, sameDay:false, memo:"단어장 · 양측 논거까지"},
+  {title:"콜드콜 스크립트 — 수요일 Contracts", course:"contracts", estMin:90, dueDow:3, sameDay:false, memo:""},
+  {title:"콜드콜 스크립트 — 수요일 Torts", course:"torts", estMin:90, dueDow:3, sameDay:false, memo:""},
+  {title:"복습 (Torts·Contracts)", course:"etc", estMin:30, dueDow:3, sameDay:true, memo:"1:30–2:45 Torts 오피스아워 가능"},
+  {title:"예습 (교재+판례) — 목요일 Torts 수업", course:"torts", estMin:150, dueDow:4, sameDay:false, memo:""},
+  {title:"예습 (교재+판례) — 목요일 CivPro 수업", course:"civpro", estMin:120, dueDow:4, sameDay:false, memo:""},
+  {title:"예습 — 목요일 Lawyering Skills", course:"ls", estMin:60, dueDow:4, sameDay:false, memo:""},
+  {title:"콜드콜 스크립트 — 목요일 Torts+CivPro", course:"etc", estMin:60, dueDow:4, sameDay:false, memo:""},
+  {title:"복습 (Torts·CivPro)", course:"etc", estMin:30, dueDow:4, sameDay:true, memo:""},
+  {title:"예습 (교재+판례) — 금요일 Contracts 수업", course:"contracts", estMin:150, dueDow:5, sameDay:false, memo:""},
+  {title:"콜드콜 스크립트 + 단어장 — 금요일 Contracts", course:"contracts", estMin:90, dueDow:5, sameDay:false, memo:""},
+  {title:"주간 정리 — 케이스별 룰 한 줄씩 아웃라인에", course:"etc", estMin:120, dueDow:5, sameDay:false, memo:""},
+  {title:"복습 (판례정리)", course:"contracts", estMin:30, dueDow:5, sameDay:true, memo:"Grenardo 오피스아워 12–1:30"},
+  {title:"예습 (교재+판례) — 월요일 Torts 수업", course:"torts", estMin:150, dueDow:1, sameDay:false, memo:""},
+  {title:"예습 (교재+판례) — 월요일 Contracts 수업", course:"contracts", estMin:120, dueDow:1, sameDay:false, memo:""},
+  {title:"예습 (교재+판례) — 월요일 CivPro 수업", course:"civpro", estMin:90, dueDow:1, sameDay:false, memo:""},
+  {title:"콜드콜 스크립트 3개 — 월요일 Torts·Contracts·CivPro", course:"etc", estMin:60, dueDow:1, sameDay:false, memo:""}
+].map((t,i)=>({id:"rc"+i, ...t}));
+const DEFAULT_ACTIVE = {0:0,1:1,2:1,3:1,4:1,5:1,6:0}; // 0=일 ... 6=토, 1=공부함
+const DEFAULT_START="15:30", DEFAULT_CUTOFF="00:30";
+
+const KEY="onel_daily_v2";
 let S = load();
 function load(){
-  try{ const raw=localStorage.getItem(KEY); if(raw){ const s=JSON.parse(raw); s.template=s.template||DEFAULT_TEMPLATE; s.cap=s.cap||DEFAULT_CAP; s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[]; return s; } }catch(e){}
-  return {template:DEFAULT_TEMPLATE, cap:{...DEFAULT_CAP}, done:{}, memos:{}, titles:{}, extras:{}, assignments:[]};
+  try{
+    const raw=localStorage.getItem(KEY);
+    if(raw){
+      const s=JSON.parse(raw);
+      s.recurring=s.recurring||DEFAULT_RECURRING;
+      s.activeDow=s.activeDow||{...DEFAULT_ACTIVE};
+      s.studyStart=s.studyStart||DEFAULT_START;
+      s.cutoff=s.cutoff||DEFAULT_CUTOFF;
+      s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[];
+      // 옛 버전(시간표 고정형) 데이터가 있으면 자동 변환
+      if(s.template && !raw.includes('"recurring"')){
+        s.recurring = s.template.map((t,i)=>({id:"rc"+i, title:t.title, course:t.course, estMin:t.dur, dueDow:t.dow===0?1:t.dow, sameDay:/복습/.test(t.title), memo:t.memo||""}));
+        if(s.cap) s.activeDow = Object.fromEntries([0,1,2,3,4,5,6].map(d=>[d, (s.cap[d]||0)>0?1:0]));
+      }
+      (s.assignments||[]).forEach(a=>{ if(a.min && !a.estMin) a.estMin=a.min; if(a.dueDayAllowed!==undefined && a.allowDueDay===undefined) a.allowDueDay=a.dueDayAllowed; });
+      Object.values(s.extras||{}).forEach(list=>list.forEach(x=>{ if(!x.estMin) x.estMin = x.time?30:( x.estMin||30); }));
+      return s;
+    }
+  }catch(e){}
+  return {studyStart:DEFAULT_START, cutoff:DEFAULT_CUTOFF, activeDow:{...DEFAULT_ACTIVE}, recurring:DEFAULT_RECURRING.map(r=>({...r})), done:{}, memos:{}, titles:{}, extras:{}, assignments:[]};
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
-/* ---------- 날짜 ---------- */
+/* ---------- 날짜 유틸 ---------- */
 let cur = new Date(); cur.setHours(0,0,0,0);
-const DOW=["일","월","화","수","목","금","토"];
 const iso = d=>{const z=new Date(d);z.setMinutes(z.getMinutes()-z.getTimezoneOffset());return z.toISOString().slice(0,10)};
 const fromISO = s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
 function shift(n){cur.setDate(cur.getDate()+n);render()}
 function goToday(){cur=new Date();cur.setHours(0,0,0,0);render()}
-const fmtTime = t=>{let [h,m]=t.split(":").map(Number);const ap=h<12?"오전":"오후";if(h>12)h-=12;if(h===0)h=12;return `${ap} ${h}:${String(m).padStart(2,"0")}`};
+function nextDow(from, dow){ const d=new Date(from); const diff=(dow - d.getDay() + 7)%7; d.setDate(d.getDate()+diff); return d; }
 const fmtDur = m=> m%60===0?`${m/60}h`:(m>60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m`);
-
-/* ---------- 스케줄러 ---------- */
-function loadOn(dateStr){ // 그날 이미 배정된 과제 분
-  return S.assignments.reduce((a,x)=>a+x.chunks.filter(c=>c.date===dateStr).reduce((b,c)=>b+c.min,0),0);
+function fmtClock(minFromMidnight){
+  let m=((minFromMidnight%1440)+1440)%1440; let h=Math.floor(m/60), mm=m%60;
+  const ap=h<12?"오전":"오후"; let hh=h%12; if(hh===0)hh=12;
+  return `${ap} ${hh}:${String(mm).padStart(2,"0")}`;
 }
-function planChunks(totalMin, dueStr, allowDueDay){
-  const today=new Date();today.setHours(0,0,0,0);
-  const due=fromISO(dueStr); const last=new Date(due); if(!allowDueDay) last.setDate(last.getDate()-1);
-  const start=new Date(today); if(new Date().getHours()>=20) start.setDate(start.getDate()+1);
-  const days=[]; for(let d=new Date(start); d<=last; d.setDate(d.getDate()+1)){
-    const ds=iso(d); const free=(S.cap[d.getDay()]||0)-loadOn(ds); if(free>=30) days.push({date:ds,free});
+function toMinutes(hhmm){ const [h,m]=hhmm.split(":").map(Number); return h*60+m; }
+
+/* ---------- 자동 스케줄러 ---------- */
+function minutesRange(startHHMM,endHHMM){
+  let s=toMinutes(startHHMM), e=toMinutes(endHHMM);
+  if(e<=s) e+=1440;
+  return e-s;
+}
+function dailyCap(date){ return S.activeDow[date.getDay()] ? minutesRange(S.studyStart,S.cutoff) : 0; }
+
+function generateJobs(horizonDays){
+  const today=new Date(); today.setHours(0,0,0,0);
+  const jobs=[];
+  S.assignments.forEach(a=>{
+    jobs.push({id:a.id, title:a.title, course:a.course, min:a.estMin, due:a.due, windowDays:99999, allowDueDay:!!a.allowDueDay, memo:a.memo, kind:"assign"});
+  });
+  const weeks=Math.ceil(horizonDays/7)+1;
+  S.recurring.forEach(r=>{
+    for(let w=0; w<weeks; w++){
+      let due=nextDow(today, r.dueDow); due.setDate(due.getDate()+7*w);
+      if((due-today)/86400000 > horizonDays) continue;
+      jobs.push({id:r.id+"@"+iso(due), title:r.title, course:r.course, min:r.estMin, due:iso(due), windowDays:r.sameDay?0:6, allowDueDay:!!r.sameDay, memo:r.memo, kind:"recurring", dueDow:r.dueDow});
+    }
+  });
+  return jobs;
+}
+function placeJob(job, used, today){
+  const due=fromISO(job.due);
+  let start=new Date(due); start.setDate(start.getDate()-job.windowDays);
+  if(start<today) start=new Date(today);
+  let last=new Date(due); if(!job.allowDueDay) last.setDate(last.getDate()-1);
+  if(last<start) last=new Date(start);
+  const days=[];
+  for(let d=new Date(start); d<=last; d.setDate(d.getDate()+1)){
+    const ds=iso(d); const free=dailyCap(d)-(used[ds]||0);
+    if(free>0) days.push({date:ds,free});
   }
-  let need=totalMin, chunks=[];
-  // 마감 가까운 날은 아끼고, 여유 많은 날부터 (동률이면 빠른 날)
   days.sort((a,b)=>b.free-a.free || a.date.localeCompare(b.date));
-  for(const d of days){ if(need<=0)break; const m=Math.min(need,d.free,120); chunks.push({date:d.date,min:m}); need-=m; }
-  chunks.sort((a,b)=>a.date.localeCompare(b.date));
+  let need=job.min; const chunks=[];
+  for(const d of days){ if(need<=0)break; const take=Math.min(need,d.free); chunks.push({date:d.date,min:take}); used[d.date]=(used[d.date]||0)+take; need-=take; }
   let overflow=0;
-  if(need>0){ const ds=iso(last<start?start:last); const ex=chunks.find(c=>c.date===ds); if(ex) ex.min+=need; else chunks.push({date:ds,min:need}); overflow=need; chunks.sort((a,b)=>a.date.localeCompare(b.date)); }
-  return {chunks,overflow};
+  if(need>0){ const ds=iso(due); const ex=chunks.find(c=>c.date===ds); if(ex) ex.min+=need; else chunks.push({date:ds,min:need}); used[ds]=(used[ds]||0)+need; overflow=need; }
+  return {chunks, overflow};
 }
-function previewAssign(){
-  const totalMin=wheelHourVal*60+wheelMinVal, due=document.getElementById("aDue").value;
-  const box=document.getElementById("aPreview");
-  if(!totalMin||!due){box.textContent="마감일과 시간을 넣으면 배정 미리보기가 보여요.";return}
-  const r=planChunks(totalMin, due, document.getElementById("aDueDay").value==="1");
-  box.innerHTML = r.chunks.map(c=>{const d=fromISO(c.date);return `${d.getMonth()+1}/${d.getDate()} (${DOW[d.getDay()]}) · ${fmtDur(c.min)}`}).join("<br>") + (r.overflow?`<br><span style="color:#b83232">⚠ ${fmtDur(r.overflow)}은 여유가 부족해서 마지막 날에 몰렸어요 — 마감 당일 허용이나 여유 시간 조정을 고려해요.</span>`:"");
+function computeSchedule(previewJob){
+  const today=new Date(); today.setHours(0,0,0,0);
+  const jobs=generateJobs(70);
+  if(previewJob) jobs.push(previewJob);
+  jobs.sort((a,b)=>a.due.localeCompare(b.due));
+  const used={};
+  Object.entries(S.extras).forEach(([ds,list])=>{ used[ds]=(used[ds]||0)+list.reduce((s,x)=>s+(x.estMin||0),0); });
+  const result=[];
+  jobs.forEach(job=>{
+    const {chunks, overflow}=placeJob(job, used, today);
+    chunks.forEach(c=>result.push({...job, date:c.date, min:c.min, overflow: overflow>0 && c.date===chunks[chunks.length-1].date}));
+  });
+  return result;
 }
-document.getElementById("aDue").addEventListener("input",previewAssign);
-document.getElementById("aDueDay").addEventListener("input",previewAssign);
 
-/* ---------- 시간(소요시간) 휠 피커 ---------- */
-let wheelHourVal=1, wheelMinVal=0;
+/* ---------- 렌더 ---------- */
+function render(){
+  const ds=iso(cur), dow=cur.getDay();
+  document.getElementById("dateTitle").textContent=`${cur.getMonth()+1}월 ${cur.getDate()}일 (${DOW[dow]})`;
+  const sched = computeSchedule();
+  const items=[];
+  (S.extras[ds]||[]).forEach(t=>items.push({key:ds+":"+t.id, course:t.course, title:t.title, memoDefault:t.memo, min:t.estMin, type:"extra", id:t.id, dueRaw:ds, dueLabel:null}));
+  sched.filter(c=>c.date===ds).forEach(c=>{
+    if(c.kind==="assign"){
+      const due=fromISO(c.due); const left=Math.round((due-cur)/86400000);
+      items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"assign", dueRaw:c.due, dueLabel:`과제 · 마감 ${due.getMonth()+1}/${due.getDate()}`, left, overflow:c.overflow});
+    } else {
+      const sameDayItem = c.date===c.due;
+      items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"recurring", dueRaw:c.due, dueLabel: sameDayItem?null:`${DOW[c.dueDow]}요일 대비`, overflow:c.overflow});
+    }
+  });
+  items.sort((a,b)=>a.dueRaw.localeCompare(b.dueRaw));
+  let clock = toMinutes(S.studyStart);
+  items.forEach(i=>{ i.timeMin=clock; clock+=i.min; });
+
+  const doneN=items.filter(i=>S.done[i.key]).length;
+  const cap=dailyCap(cur);
+  document.getElementById("dateSub").textContent = items.length?`${doneN}/${items.length} 완료 · 총 ${fmtDur(items.reduce((a,i)=>a+i.min,0))}${cap?` / ${fmtDur(cap)} 가능`:""}`:(cap===0?"쉬는 날 🌿":"할 일 없음");
+  document.getElementById("prog").style.width=(items.length?doneN/items.length*100:0)+"%";
+
+  let html="";
+  if(items.length){
+    html+=`<div class="section-label">할 일</div>`;
+    items.forEach(i=>{
+      const memo = S.memos[i.key] ?? i.memoDefault ?? "";
+      const title = S.titles[i.key] ?? i.title ?? "";
+      const c=COURSES[i.course]||COURSES.etc;
+      html+=`<div class="task ${S.done[i.key]?"done":""}">
+        <div class="check" onclick="toggle('${i.key}')">${S.done[i.key]?"✓":""}</div>
+        <div class="bar" style="background:${c.color}"></div>
+        <div class="body">
+          <div class="title-row"><span class="title-text" contenteditable="true" data-key="${i.key}" data-default="${esc(i.title)}" onblur="saveTitle(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${esc(title)}</span>${i.dueLabel?`<span class="tag ${i.type==='assign'&&i.left<=1?"warn":""}">${i.dueLabel}</span>`:""}${i.overflow?`<span class="tag warn">⚠ 시간 부족</span>`:""}</div>
+          <div class="meta">${c.name} · ${fmtClock(i.timeMin)} · ${fmtDur(i.min)}</div>
+          <div class="memo" contenteditable="true" data-key="${i.key}" data-empty="${memo?0:1}" onblur="saveMemo(this)" oninput="this.dataset.empty=this.textContent.trim()?0:1">${esc(memo)}</div>
+        </div>
+        ${i.type==="extra"?`<button class="del" onclick="delExtra('${ds}','${i.id}')">✕</button>`:""}
+      </div>`;
+    });
+  } else html+=`<div class="empty">${cap===0?"쉬는 날이에요.<br>푹 쉬어요 ☕":"이 날은 아직 할 일이 없어요.<br>아래에서 추가할 수 있어요."}</div>`;
+
+  if(CLASSES[dow]){
+    html+=`<div class="section-label">수업</div>`;
+    CLASSES[dow].forEach(([k,t,room])=>{const c=COURSES[k];html+=`<div class="class-card"><div class="bar" style="background:${c.color}"></div><div><b>${c.name} 수업</b><span style="font-size:13px">${t.includes("pm")?"오후 "+t.replace(" pm",""):"오전 "+t} · ${room}</span></div></div>`});
+  }
+  document.getElementById("main").innerHTML=html;
+}
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+function toggle(k){ if(S.done[k]) delete S.done[k]; else S.done[k]=1; save(); render(); }
+function saveMemo(el){ const v=el.textContent.trim(); S.memos[el.dataset.key]=v; save(); }
+function saveTitle(el){ const v=el.textContent.trim(); if(v) S.titles[el.dataset.key]=v; else { delete S.titles[el.dataset.key]; el.textContent=el.dataset.default; } save(); }
+function delExtra(ds,id){ S.extras[ds]=(S.extras[ds]||[]).filter(t=>t.id!==id); save(); render(); }
+
+/* ---------- 시트 공통 ---------- */
+function openSheet(id){ if(id==="assignSheet") renderAssignList(); if(id==="settingsSheet") renderRecEditor(); document.getElementById(id).classList.add("open"); }
+function closeSheet(id){ document.getElementById(id).classList.remove("open"); }
+function bgClose(e,id){ if(e.target.id===id) closeSheet(id); }
+function fillCourses(sel){ sel.innerHTML=Object.entries(COURSES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(""); }
+fillCourses(document.getElementById("aCourse")); fillCourses(document.getElementById("tCourse"));
+
+/* ---------- 소요시간 휠 피커 (재사용) ---------- */
 function buildWheel(id, values, fmt, initial, onChange){
   const col=document.getElementById(id);
   col.innerHTML = `<div class="wheel-pad"></div>` + values.map(v=>`<div class="wheel-item" data-v="${v}">${fmt(v)}</div>`).join("") + `<div class="wheel-pad"></div>`;
@@ -311,126 +440,93 @@ function buildWheel(id, values, fmt, initial, onChange){
   col.scrollTop=startIdx*40;
   setTimeout(()=>updateSel(false),0);
 }
-function setupWheels(h,m){
-  wheelHourVal=h; wheelMinVal=m;
-  buildWheel("wheelHour",[...Array(11).keys()],v=>v,h,v=>{wheelHourVal=v;previewAssign();});
-  buildWheel("wheelMin",[0,5,10,15,20,25,30,35,40,45,50,55],v=>String(v).padStart(2,"0"),m,v=>{wheelMinVal=v;previewAssign();});
+const HOURV=[...Array(11).keys()], MINV=[0,5,10,15,20,25,30,35,40,45,50,55];
+const pad2=v=>String(v).padStart(2,"0");
+
+let wheelHourVal=1, wheelMinVal=0;
+function setupWheels(h,m){ wheelHourVal=h; wheelMinVal=m; buildWheel("wheelHour",HOURV,v=>v,h,v=>{wheelHourVal=v;previewAssign();}); buildWheel("wheelMin",MINV,pad2,m,v=>{wheelMinVal=v;previewAssign();}); }
+let xHourVal=1, xMinVal=0;
+function setupWheelsX(h,m){ xHourVal=h; xMinVal=m; buildWheel("wheelHourX",HOURV,v=>v,h,v=>{xHourVal=v;}); buildWheel("wheelMinX",MINV,pad2,m,v=>{xMinVal=v;}); }
+
+/* ---------- 과제 추가 ---------- */
+function previewAssign(){
+  const totalMin=wheelHourVal*60+wheelMinVal, due=document.getElementById("aDue").value;
+  const box=document.getElementById("aPreview");
+  if(!totalMin||!due){box.textContent="마감일과 시간을 넣으면 배정 미리보기가 보여요.";return}
+  const candidate={id:"preview", title:"", course:"etc", min:totalMin, due, windowDays:99999, allowDueDay:document.getElementById("aDueDay").value==="1", kind:"assign"};
+  const sched=computeSchedule(candidate).filter(c=>c.id==="preview");
+  if(!sched.length){ box.textContent="배정할 수 있는 날이 없어요 — 마감일이나 시간을 조정해봐요."; return; }
+  box.innerHTML = sched.map(c=>{const d=fromISO(c.date);return `${d.getMonth()+1}/${d.getDate()} (${DOW[d.getDay()]}) · ${fmtDur(c.min)}`}).join("<br>") + (sched.some(c=>c.overflow)?`<br><span style="color:#b83232">⚠ 여유가 부족해서 마감일에 몰렸어요.</span>`:"");
 }
-
-/* ---------- 렌더 ---------- */
-function render(){
-  const ds=iso(cur), dow=cur.getDay();
-  document.getElementById("dateTitle").textContent=`${cur.getMonth()+1}월 ${cur.getDate()}일 (${DOW[dow]})`;
-  const items=[];
-  S.template.filter(t=>t.dow===dow).forEach(t=>items.push({key:ds+":"+t.id,time:t.time,dur:t.dur,course:t.course,title:t.title,memoDefault:t.memo,type:"tpl"}));
-  (S.extras[ds]||[]).forEach(t=>items.push({key:ds+":"+t.id,time:t.time,dur:0,course:t.course,title:t.title,memoDefault:t.memo,type:"extra",id:t.id}));
-  S.assignments.forEach(a=>a.chunks.filter(c=>c.date===ds).forEach(c=>{
-    const due=fromISO(a.due); const left=Math.round((due-cur)/86400000);
-    items.push({key:ds+":"+a.id,time:"23:00",dur:c.min,course:a.course,title:a.title,memoDefault:a.memo,type:"assign",due:`마감 ${due.getMonth()+1}/${due.getDate()}`,left,aid:a.id});
-  }));
-  items.sort((a,b)=>a.time.localeCompare(b.time));
-  const doneN=items.filter(i=>S.done[i.key]).length;
-  document.getElementById("dateSub").textContent = items.length?`${doneN}/${items.length} 완료 · 총 ${fmtDur(items.reduce((a,i)=>a+i.dur,0))}`:(dow===6?"완전 휴식 🌿":"할 일 없음");
-  document.getElementById("prog").style.width=(items.length?doneN/items.length*100:0)+"%";
-
-  let html="";
-  if(items.length){
-    html+=`<div class="section-label">할 일</div>`;
-    items.forEach(i=>{
-      const memo = S.memos[i.key] ?? i.memoDefault ?? "";
-      const title = S.titles[i.key] ?? i.title ?? "";
-      const c=COURSES[i.course]||COURSES.etc;
-      html+=`<div class="task ${S.done[i.key]?"done":""}">
-        <div class="check" onclick="toggle('${i.key}')">${S.done[i.key]?"✓":""}</div>
-        <div class="bar" style="background:${c.color}"></div>
-        <div class="body">
-          <div class="title-row"><span class="title-text" contenteditable="true" data-key="${i.key}" data-default="${esc(i.title)}" onblur="saveTitle(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${esc(title)}</span>${i.type==="assign"?`<span class="tag ${i.left<=1?"warn":""}">과제 · ${i.due}</span>`:""}</div>
-          <div class="meta">${c.name}${i.type==="assign"?"":" · "+fmtTime(i.time)}${i.dur?" · "+fmtDur(i.dur):""}</div>
-          <div class="memo" contenteditable="true" data-key="${i.key}" data-empty="${memo?0:1}" onblur="saveMemo(this)" oninput="this.dataset.empty=this.textContent.trim()?0:1">${esc(memo)}</div>
-        </div>
-        ${i.type==="extra"?`<button class="del" onclick="delExtra('${ds}','${i.id}')">✕</button>`:""}
-      </div>`;
-    });
-  } else html+=`<div class="empty">${dow===6?"토요일은 쉬는 날이에요.<br>푹 쉬어요 ☕":"이 날은 아직 할 일이 없어요.<br>아래에서 추가할 수 있어요."}</div>`;
-
-  if(CLASSES[dow]){
-    html+=`<div class="section-label">수업</div>`;
-    CLASSES[dow].forEach(([k,t,room])=>{const c=COURSES[k];html+=`<div class="class-card"><div class="bar" style="background:${c.color}"></div><div><b>${c.name} 수업</b><span style="font-size:13px">${t.includes("pm")?"오후 "+t.replace(" pm",""):"오전 "+t} · ${room}</span></div></div>`});
-  }
-  document.getElementById("main").innerHTML=html;
-}
-const esc=s=>String(s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
-function toggle(k){ if(S.done[k]) delete S.done[k]; else S.done[k]=1; save(); render(); }
-function saveMemo(el){ const v=el.textContent.trim(); S.memos[el.dataset.key]=v; save(); }
-function saveTitle(el){ const v=el.textContent.trim(); if(v) S.titles[el.dataset.key]=v; else { delete S.titles[el.dataset.key]; el.textContent=el.dataset.default; } save(); }
-function delExtra(ds,id){ S.extras[ds]=(S.extras[ds]||[]).filter(t=>t.id!==id); save(); render(); }
-
-/* ---------- 시트 ---------- */
-function openSheet(id){ if(id==="assignSheet") renderAssignList(); if(id==="settingsSheet") renderSettings(); document.getElementById(id).classList.add("open"); }
-function closeSheet(id){ document.getElementById(id).classList.remove("open"); }
-function bgClose(e,id){ if(e.target.id===id) closeSheet(id); }
-function fillCourses(sel){ sel.innerHTML=Object.entries(COURSES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(""); }
-fillCourses(document.getElementById("aCourse")); fillCourses(document.getElementById("tCourse"));
-
+document.getElementById("aDue").addEventListener("input",previewAssign);
+document.getElementById("aDueDay").addEventListener("input",previewAssign);
 function openAddAssign(){ document.getElementById("aTitle").value="";document.getElementById("aMemo").value="";document.getElementById("aDue").value="";document.getElementById("aDueDay").value="0";setupWheels(1,0);previewAssign();openSheet("addAssign"); }
 function saveAssign(){
   const title=document.getElementById("aTitle").value.trim(), totalMin=wheelHourVal*60+wheelMinVal, due=document.getElementById("aDue").value;
   if(!title||!totalMin||!due){alert("과제 이름, 마감일, 예상 시간을 채워주세요.");return}
-  const r=planChunks(totalMin, due, document.getElementById("aDueDay").value==="1");
-  S.assignments.push({id:"a"+Date.now(),title,course:document.getElementById("aCourse").value,due,min:totalMin,memo:document.getElementById("aMemo").value.trim(),chunks:r.chunks});
+  S.assignments.push({id:"a"+Date.now(), title, course:document.getElementById("aCourse").value, due, estMin:totalMin, memo:document.getElementById("aMemo").value.trim(), allowDueDay:document.getElementById("aDueDay").value==="1"});
   save(); closeSheet("addAssign"); render();
-}
-function openAddTask(){ document.getElementById("tTitle").value="";document.getElementById("tMemo").value="";openSheet("addTask"); }
-function saveTask(){
-  const title=document.getElementById("tTitle").value.trim(); if(!title){alert("할 일을 적어주세요.");return}
-  const ds=iso(cur); S.extras[ds]=S.extras[ds]||[];
-  S.extras[ds].push({id:"x"+Date.now(),title,course:document.getElementById("tCourse").value,time:document.getElementById("tTime").value||"15:30",memo:document.getElementById("tMemo").value.trim()});
-  save(); closeSheet("addTask"); render();
 }
 function renderAssignList(){
   const box=document.getElementById("assignList");
   if(!S.assignments.length){box.innerHTML=`<div class="empty">아직 추가된 과제가 없어요.</div>`;return}
+  const sched=computeSchedule();
   box.innerHTML=S.assignments.slice().sort((a,b)=>a.due.localeCompare(b.due)).map(a=>{
-    const done=a.chunks.every(c=>S.done[c.date+":"+a.id]);
-    const plan=a.chunks.map(c=>{const d=fromISO(c.date);return `${d.getMonth()+1}/${d.getDate()} ${fmtDur(c.min)}`}).join(" · ");
-    return `<div class="list-item"><div><span style="color:${COURSES[a.course].color}">●</span> ${done?"<s>":""}${esc(a.title)}${done?"</s>":""}<small>${COURSES[a.course].name} · 마감 ${a.due} · ${fmtDur(a.min)}</small><small>${plan}</small></div><button onclick="delAssign('${a.id}')">삭제</button></div>`;
+    const chunks=sched.filter(c=>c.kind==="assign" && c.id===a.id);
+    const done=chunks.length && chunks.every(c=>S.done[c.date+":"+a.id]);
+    const plan=chunks.map(c=>{const d=fromISO(c.date);return `${d.getMonth()+1}/${d.getDate()} ${fmtDur(c.min)}`}).join(" · ");
+    return `<div class="list-item"><div><span style="color:${COURSES[a.course].color}">●</span> ${done?"<s>":""}${esc(a.title)}${done?"</s>":""}<small>${COURSES[a.course].name} · 마감 ${a.due} · ${fmtDur(a.estMin)}</small><small>${plan||"배정 실패"}</small></div><button onclick="delAssign('${a.id}')">삭제</button></div>`;
   }).join("");
 }
-function delAssign(id){ if(!confirm("이 과제와 배정된 일정을 모두 지울까요?"))return; S.assignments=S.assignments.filter(a=>a.id!==id); save(); renderAssignList(); render(); }
+function delAssign(id){ if(!confirm("이 과제를 지울까요?"))return; S.assignments=S.assignments.filter(a=>a.id!==id); save(); renderAssignList(); render(); }
 
-function renderSettings(){
-  const box=document.getElementById("tplEditor"); let html="";
-  [1,2,3,4,5,6,0].forEach(d=>{
-    html+=`<div class="tpl-day">${DOW[d]}요일 <button style="font-size:12px;background:none;border:1px solid var(--line);border-radius:8px;padding:3px 8px;margin-left:6px;font-family:inherit" onclick="addTpl(${d})">+ 추가</button></div>`;
-    S.template.filter(t=>t.dow===d).sort((a,b)=>a.time.localeCompare(b.time)).forEach(t=>{
-      html+=`<div class="tpl-card" data-id="${t.id}">
-        <div class="tpl-top">
-          <input type="time" value="${t.time}" class="tt">
-          <select class="tcourse">${Object.entries(COURSES).map(([k,v])=>`<option value="${k}" ${t.course===k?"selected":""}>${v.name}</option>`).join("")}</select>
-          <input type="number" value="${t.dur}" class="tdur" title="분">
-          <button class="tdel" onclick="delTpl('${t.id}')">✕</button>
-        </div>
-        <input class="ttitle" value="${esc(t.title)}" placeholder="할 일 이름">
-      </div>`;
-    });
-  });
-  box.innerHTML=html;
-  document.getElementById("capEditor").innerHTML=[1,2,3,4,5,6,0].map(d=>`<div>${DOW[d]}<input type="number" data-dow="${d}" value="${S.cap[d]||0}"></div>`).join("");
+/* ---------- 이 날 할 일 추가 ---------- */
+function openAddTask(){ document.getElementById("tTitle").value="";document.getElementById("tMemo").value="";setupWheelsX(0,30);openSheet("addTask"); }
+function saveTask(){
+  const title=document.getElementById("tTitle").value.trim(); if(!title){alert("할 일을 적어주세요.");return}
+  const estMin=xHourVal*60+xMinVal; if(!estMin){alert("예상 소요 시간을 정해주세요.");return}
+  const ds=iso(cur); S.extras[ds]=S.extras[ds]||[];
+  S.extras[ds].push({id:"x"+Date.now(), title, course:document.getElementById("tCourse").value, estMin, memo:document.getElementById("tMemo").value.trim()});
+  save(); closeSheet("addTask"); render();
 }
-function addTpl(d){ collectSettings(); S.template.push({id:"tpl"+Date.now(),dow:d,time:"15:30",dur:60,course:"etc",title:"새 할 일",memo:""}); renderSettings(); }
-function delTpl(id){ collectSettings(); S.template=S.template.filter(t=>t.id!==id); renderSettings(); }
-function collectSettings(){
-  document.querySelectorAll("#tplEditor .tpl-card").forEach(card=>{
-    const t=S.template.find(x=>x.id===card.dataset.id); if(!t)return;
-    t.time=card.querySelector(".tt").value||t.time; t.title=card.querySelector(".ttitle").value; t.dur=parseInt(card.querySelector(".tdur").value)||0;
-    t.course=card.querySelector(".tcourse").value;
-  });
-  document.querySelectorAll("#capEditor input").forEach(i=>S.cap[i.dataset.dow]=parseInt(i.value)||0);
+
+/* ---------- 설정: 시작시간/요일/반복항목 ---------- */
+function renderRecEditor(){
+  document.getElementById("setStart").value=S.studyStart;
+  document.getElementById("setCutoff").value=S.cutoff;
+  document.getElementById("dowToggle").innerHTML=[1,2,3,4,5,6,0].map(d=>`<button type="button" class="${S.activeDow[d]?"on":""}" onclick="toggleDow(${d})">${DOW[d]}</button>`).join("");
+  document.getElementById("recEditor").innerHTML = S.recurring.map(r=>`
+    <div class="rec-card" data-id="${r.id}">
+      <div class="rec-top">
+        <select class="rcourse">${Object.entries(COURSES).map(([k,v])=>`<option value="${k}" ${r.course===k?"selected":""}>${v.name}</option>`).join("")}</select>
+        <select class="rdue">${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${r.dueDow===d?"selected":""}>${DOW[d]}요일</option>`).join("")}</select>
+        <input type="number" class="rhr" min="0" value="${Math.floor(r.estMin/60)}" title="시간">
+        <select class="rmin"><option value="0" ${r.estMin%60===0?"selected":""}>00</option><option value="15" ${r.estMin%60===15?"selected":""}>15</option><option value="30" ${r.estMin%60===30?"selected":""}>30</option><option value="45" ${r.estMin%60===45?"selected":""}>45</option></select>
+        <button class="rdel" onclick="delRecurring('${r.id}')">✕</button>
+      </div>
+      <input class="rec-title" value="${esc(r.title)}" placeholder="할 일 이름">
+      <div class="rec-bottom"><label class="same-toggle"><input type="checkbox" class="rsame" ${r.sameDay?"checked":""}> 당일에만 (복습형)</label></div>
+    </div>`).join("");
 }
-function saveSettings(){ collectSettings(); save(); closeSheet("settingsSheet"); render(); }
+function toggleDow(d){ S.activeDow[d]=S.activeDow[d]?0:1; renderRecEditor(); }
+function addRecurring(){ collectRecSettings(); S.recurring.push({id:"rc"+Date.now(), title:"새 반복 항목", course:"etc", estMin:60, dueDow:1, sameDay:false, memo:""}); renderRecEditor(); }
+function delRecurring(id){ collectRecSettings(); S.recurring=S.recurring.filter(r=>r.id!==id); renderRecEditor(); }
+function collectRecSettings(){
+  S.studyStart=document.getElementById("setStart").value||S.studyStart;
+  S.cutoff=document.getElementById("setCutoff").value||S.cutoff;
+  document.querySelectorAll("#recEditor .rec-card").forEach(card=>{
+    const r=S.recurring.find(x=>x.id===card.dataset.id); if(!r)return;
+    r.course=card.querySelector(".rcourse").value;
+    r.dueDow=parseInt(card.querySelector(".rdue").value);
+    r.estMin=(parseInt(card.querySelector(".rhr").value)||0)*60+parseInt(card.querySelector(".rmin").value);
+    r.title=card.querySelector(".rec-title").value;
+    r.sameDay=card.querySelector(".rsame").checked;
+  });
+}
+function saveSettings(){ collectRecSettings(); save(); closeSheet("settingsSheet"); render(); }
 
 function exportJSON(){ const b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=`1L-daily-${iso(new Date())}.json`; a.click(); }
-function importJSON(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ S=JSON.parse(r.result); S.template=S.template||DEFAULT_TEMPLATE; save(); render(); renderSettings(); alert("불러왔어요."); }catch(e){alert("파일을 읽지 못했어요.")} }; r.readAsText(f); }
+function importJSON(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ const p=JSON.parse(r.result); p.recurring=p.recurring||DEFAULT_RECURRING; p.activeDow=p.activeDow||{...DEFAULT_ACTIVE}; p.studyStart=p.studyStart||DEFAULT_START; p.cutoff=p.cutoff||DEFAULT_CUTOFF; p.done=p.done||{}; p.memos=p.memos||{}; p.titles=p.titles||{}; p.extras=p.extras||{}; p.assignments=p.assignments||{}; S=p; save(); render(); alert("불러왔어요."); }catch(e){alert("파일을 읽지 못했어요.")} }; r.readAsText(f); }
 
 render();
 </script>
