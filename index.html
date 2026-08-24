@@ -317,10 +317,13 @@ function generateJobs(horizonDays){
   });
   const weeks=Math.ceil(horizonDays/7)+1;
   S.recurring.forEach(r=>{
+    // 예습형은 수업 당일/과거면 이미 늦은 것 → 다음 주 수업부터
+    let base=nextDow(today, r.dueDow);
+    if(!r.sameDay && base<=today) base.setDate(base.getDate()+7);
     for(let w=0; w<weeks; w++){
-      let due=nextDow(today, r.dueDow); due.setDate(due.getDate()+7*w);
-      if((due-today)/86400000 > horizonDays) continue;
-      jobs.push({id:r.id+"@"+iso(due), title:r.title, course:r.course, min:r.estMin, due:iso(due), windowDays:r.sameDay?0:6, allowDueDay:!!r.sameDay, memo:r.memo, kind:"recurring", dueDow:r.dueDow});
+      const due=new Date(base); due.setDate(due.getDate()+7*w);
+      if((due-today)/86400000 > horizonDays) break;
+      jobs.push({id:r.id+"@"+iso(due), title:r.title, course:r.course, min:r.estMin, due:iso(due), windowDays:r.sameDay?0:6, allowDueDay:!!r.sameDay, strategy:r.sameDay?"same":"late", memo:r.memo, kind:"recurring", dueDow:r.dueDow});
     }
   });
   return jobs;
@@ -330,17 +333,22 @@ function placeJob(job, used, today){
   let start=new Date(due); start.setDate(start.getDate()-job.windowDays);
   if(start<today) start=new Date(today);
   let last=new Date(due); if(!job.allowDueDay) last.setDate(last.getDate()-1);
-  if(last<start) last=new Date(start);
   const days=[];
   for(let d=new Date(start); d<=last; d.setDate(d.getDate()+1)){
     const ds=iso(d); const free=dailyCap(d)-(used[ds]||0);
     if(free>0) days.push({date:ds,free});
   }
-  days.sort((a,b)=>b.free-a.free || a.date.localeCompare(b.date));
+  // 예습형: 수업 전날부터 거꾸로(최대한 직전에) / 과제: 여유 많은 날부터 고르게
+  if(job.strategy==="late") days.sort((a,b)=>b.date.localeCompare(a.date));
+  else days.sort((a,b)=>b.free-a.free || a.date.localeCompare(b.date));
   let need=job.min; const chunks=[];
   for(const d of days){ if(need<=0)break; const take=Math.min(need,d.free); chunks.push({date:d.date,min:take}); used[d.date]=(used[d.date]||0)+take; need-=take; }
   let overflow=0;
-  if(need>0){ const ds=iso(due); const ex=chunks.find(c=>c.date===ds); if(ex) ex.min+=need; else chunks.push({date:ds,min:need}); used[ds]=(used[ds]||0)+need; overflow=need; }
+  if(need>0){
+    // 못 넣은 나머지: 당일 허용이면 마감일, 아니면 마감 전날(오늘보다 이전이면 오늘)
+    let od=new Date(due); if(!job.allowDueDay) od.setDate(od.getDate()-1); if(od<today) od=new Date(today);
+    const ds=iso(od); const ex=chunks.find(c=>c.date===ds); if(ex) ex.min+=need; else chunks.push({date:ds,min:need}); used[ds]=(used[ds]||0)+need; overflow=need;
+  }
   return {chunks, overflow};
 }
 function computeSchedule(previewJob){
