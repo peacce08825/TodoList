@@ -282,7 +282,7 @@ function load(){
       s.activeDow=s.activeDow||{...DEFAULT_ACTIVE};
       s.studyStart=s.studyStart||DEFAULT_START;
       s.cutoff=s.cutoff||DEFAULT_CUTOFF;
-      s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[];
+      s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[]; s.makeupMap=s.makeupMap||{};
       // 옛 버전(시간표 고정형) 데이터가 있으면 자동 변환
       if(s.template && !raw.includes('"recurring"')){
         s.recurring = s.template.map((t,i)=>({id:"rc"+i, title:t.title, course:t.course, estMin:t.dur, dueDow:t.dow===0?1:t.dow, sameDay:/복습/.test(t.title), memo:t.memo||""}));
@@ -293,9 +293,51 @@ function load(){
       return s;
     }
   }catch(e){}
-  return {studyStart:DEFAULT_START, cutoff:DEFAULT_CUTOFF, activeDow:{...DEFAULT_ACTIVE}, recurring:DEFAULT_RECURRING.map(r=>({...r})), done:{}, memos:{}, titles:{}, extras:{}, assignments:[]};
+  return {studyStart:DEFAULT_START, cutoff:DEFAULT_CUTOFF, activeDow:{...DEFAULT_ACTIVE}, recurring:DEFAULT_RECURRING.map(r=>({...r})), done:{}, memos:{}, titles:{}, extras:{}, assignments:[], makeupMap:{}};
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+/* ---------- 밀린 일 자동 이월 ---------- */
+// 특정 반복 항목의 특정 회차(jobId)가 언젠가 체크된 적 있는지 확인
+function jobFullyDone(jobId){
+  const suffix=":"+jobId;
+  return Object.keys(S.done).some(k=>k.endsWith(suffix) && S.done[k]);
+}
+function syncMakeup(){
+  S.makeupMap = S.makeupMap || {};
+  const today=new Date(); today.setHours(0,0,0,0);
+  const todayIso = iso(today);
+  let changed=false;
+  const dueDate=()=>{ const d=new Date(today); d.setDate(d.getDate()+3); return iso(d); };
+
+  // 매주 반복 항목: 최근 21일 안의 지난 마감 회차 중 미완료 → 밀린 항목으로 전환
+  S.recurring.forEach(r=>{
+    let d=new Date(today); d.setDate(d.getDate()-14);
+    const diff=(r.dueDow - d.getDay()+7)%7; d.setDate(d.getDate()+diff);
+    for(; d<today; d.setDate(d.getDate()+7)){
+      const jobId=r.id+"@"+iso(d);
+      if(S.makeupMap[jobId]) continue;
+      if(jobFullyDone(jobId)){ S.makeupMap[jobId]="done"; changed=true; continue; }
+      const mid="mk"+Date.now()+Math.floor(Math.random()*10000);
+      S.assignments.push({id:mid, title:r.title+" (밀린 부분)", course:r.course, due:dueDate(), estMin:r.estMin, memo:r.memo, allowDueDay:true, subItems:r.subItems||[], makeup:true});
+      S.makeupMap[jobId]=mid; changed=true;
+    }
+  });
+  // 이 날 할 일(extras): 지난 날짜 중 못한 것 → 밀린 항목으로 전환, 지난 날짜는 정리
+  Object.keys(S.extras).forEach(ds=>{
+    if(ds>=todayIso) return;
+    (S.extras[ds]||[]).forEach(t=>{
+      const key=ds+":"+t.id;
+      if(!S.done[key]){
+        const mid="mk"+Date.now()+Math.floor(Math.random()*10000);
+        S.assignments.push({id:mid, title:t.title+" (밀린 부분)", course:t.course, due:dueDate(), estMin:t.estMin, memo:t.memo, allowDueDay:true, subItems:t.subItems||[], makeup:true});
+        changed=true;
+      }
+    });
+    delete S.extras[ds]; changed=true;
+  });
+  if(changed) save();
+}
 
 /* ---------- 날짜 유틸 ---------- */
 let cur = new Date(); cur.setHours(0,0,0,0);
@@ -324,7 +366,7 @@ function generateJobs(horizonDays){
   const today=new Date(); today.setHours(0,0,0,0);
   const jobs=[];
   S.assignments.forEach(a=>{
-    jobs.push({id:a.id, title:a.title, course:a.course, min:a.estMin, due:a.due, windowDays:99999, allowDueDay:!!a.allowDueDay, memo:a.memo, subItems:a.subItems||[], kind:"assign"});
+    jobs.push({id:a.id, title:a.title, course:a.course, min:a.estMin, due:a.due, windowDays:99999, allowDueDay:!!a.allowDueDay, memo:a.memo, subItems:a.subItems||[], makeup:!!a.makeup, kind:"assign"});
   });
   const weeks=Math.ceil(horizonDays/7)+1;
   S.recurring.forEach(r=>{
@@ -388,6 +430,7 @@ function computeSchedule(previewJob){
 
 /* ---------- 렌더 ---------- */
 function render(){
+  syncMakeup();
   const ds=iso(cur), dow=cur.getDay();
   document.getElementById("dateTitle").textContent=`${cur.getMonth()+1}월 ${cur.getDate()}일 (${DOW[dow]})`;
   const sched = computeSchedule();
@@ -396,7 +439,7 @@ function render(){
   sched.filter(c=>c.date===ds).forEach(c=>{
     if(c.kind==="assign"){
       const due=fromISO(c.due); const left=Math.round((due-cur)/86400000);
-      items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"assign", dueRaw:c.due, dueLabel:`과제 · 마감 ${due.getMonth()+1}/${due.getDate()}`, left, overflow:c.overflow, subItems:c.subItems||[]});
+      items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"assign", dueRaw:c.due, dueLabel: c.makeup?`⏰ 밀린 항목`:`과제 · 마감 ${due.getMonth()+1}/${due.getDate()}`, left, overflow:c.overflow, subItems:c.subItems||[]});
     } else {
       const sameDayItem = c.date===c.due;
       items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"recurring", dueRaw:c.due, dueLabel: sameDayItem?null:`${DOW[c.dueDow]}요일 대비`, overflow:c.overflow, subItems:c.subItems||[]});
@@ -424,7 +467,7 @@ function render(){
         <div class="check" onclick="toggle('${i.key}',${subs.length})">${done?"✓":""}</div>
         <div class="bar" style="background:${c.color}"></div>
         <div class="body">
-          <div class="title-row"><span class="title-text" contenteditable="true" data-key="${i.key}" data-default="${esc(i.title)}" onblur="saveTitle(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${esc(title)}</span>${i.dueLabel?`<span class="tag ${i.type==='assign'&&i.left<=1?"warn":""}">${i.dueLabel}</span>`:""}${i.overflow?`<span class="tag warn">⚠ 시간 부족</span>`:""}</div>
+          <div class="title-row"><span class="title-text" contenteditable="true" data-key="${i.key}" data-default="${esc(i.title)}" onblur="saveTitle(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${esc(title)}</span>${i.dueLabel?`<span class="tag ${(i.type==='assign'&&i.left<=1)||i.dueLabel.includes("밀린")?"warn":""}">${i.dueLabel}</span>`:""}${i.overflow?`<span class="tag warn">⚠ 시간 부족</span>`:""}</div>
           <div class="meta">${c.name} · ${fmtClock(i.timeMin)} · ${fmtDur(i.min)}</div>
           ${subs.length?`<div class="sublist">${subs.map((lbl,idx)=>{const sk=i.key+"::"+idx;const sdone=!!S.done[sk];return `<div class="subitem ${sdone?"done":""}" onclick="toggleSub('${i.key}',${idx},${subs.length})"><span class="subcheck">${sdone?"✓":""}</span>${esc(lbl)}</div>`}).join("")}</div>`:""}
           <div class="memo" contenteditable="true" data-key="${i.key}" data-empty="${memo?0:1}" onblur="saveMemo(this)" oninput="this.dataset.empty=this.textContent.trim()?0:1">${esc(memo)}</div>
@@ -573,7 +616,7 @@ function collectRecSettings(){
 function saveSettings(){ collectRecSettings(); save(); closeSheet("settingsSheet"); render(); }
 
 function exportJSON(){ const b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=`1L-daily-${iso(new Date())}.json`; a.click(); }
-function importJSON(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ const p=JSON.parse(r.result); p.recurring=p.recurring||DEFAULT_RECURRING; p.activeDow=p.activeDow||{...DEFAULT_ACTIVE}; p.studyStart=p.studyStart||DEFAULT_START; p.cutoff=p.cutoff||DEFAULT_CUTOFF; p.done=p.done||{}; p.memos=p.memos||{}; p.titles=p.titles||{}; p.extras=p.extras||{}; p.assignments=p.assignments||{}; S=p; save(); render(); alert("불러왔어요."); }catch(e){alert("파일을 읽지 못했어요.")} }; r.readAsText(f); }
+function importJSON(inp){ const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ const p=JSON.parse(r.result); p.recurring=p.recurring||DEFAULT_RECURRING; p.activeDow=p.activeDow||{...DEFAULT_ACTIVE}; p.studyStart=p.studyStart||DEFAULT_START; p.cutoff=p.cutoff||DEFAULT_CUTOFF; p.done=p.done||{}; p.memos=p.memos||{}; p.titles=p.titles||{}; p.extras=p.extras||{}; p.assignments=p.assignments||[]; p.makeupMap=p.makeupMap||{}; S=p; save(); render(); alert("불러왔어요."); }catch(e){alert("파일을 읽지 못했어요.")} }; r.readAsText(f); }
 
 render();
 </script>
