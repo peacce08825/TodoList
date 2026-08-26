@@ -143,6 +143,11 @@ textarea{min-height:64px;resize:vertical}
 .startgrid .sd b{width:18px;font-size:13px;color:var(--accent-deep)}
 .startgrid .sd input{padding:7px;font-size:13.5px;border-radius:9px;background:#fff}
 .startgrid .sd.off{opacity:.45}
+.mv{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:4px}
+.mv button{width:34px;height:30px;border-radius:9px;border:1px solid var(--line);background:var(--accent-soft);color:var(--accent-deep);font-size:13px;cursor:pointer;font-weight:700}
+.mv button:disabled{opacity:.3}
+.tl.reorder .card{border-color:var(--accent);border-style:dashed;padding-right:52px;min-height:82px}
+.tl.reorder .memo,.tl.reorder .subs{display:none}
 .edit-btn{position:absolute;right:6px;top:6px;background:none;border:none;color:#C4BFD6;font-size:18px;cursor:pointer;padding:4px 8px;line-height:1}
 .mini{position:absolute;right:0;top:-2px;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:5px 10px;background:#fff;color:var(--ink);cursor:pointer;font-weight:500}
 .rc{border:1px solid var(--line);border-radius:14px;padding:10px;margin-top:8px;background:var(--paper)}
@@ -308,7 +313,7 @@ function load(){
   s.activeDow=s.activeDow||{...DEFAULT_ACTIVE};
   s.studyStart=s.studyStart||DEFAULT_START; s.cutoff=s.cutoff||DEFAULT_CUTOFF; s.theme=s.theme||DEFAULT_THEME;
   if(!s.startByDow){ s.startByDow={}; [0,1,2,3,4,5,6].forEach(d=>s.startByDow[d]=(s.studyStart===DEFAULT_START&&(d===3||d===5))?"13:00":s.studyStart); }
-  s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[]; s.makeupMap=s.makeupMap||{};
+  s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[]; s.makeupMap=s.makeupMap||{}; s.order=s.order||{};
   (s.assignments).forEach(a=>{ if(a.min && !a.estMin) a.estMin=a.min; if(a.dueDayAllowed!==undefined && a.allowDueDay===undefined) a.allowDueDay=a.dueDayAllowed; });
   Object.values(s.extras).forEach(list=>list.forEach(x=>{ if(!x.estMin) x.estMin=30; }));
   // 첫 실행(또는 이전 버전에서 넘어옴): 실제로 앱을 쓴 적 없는 날은 "밀린 일"이 아님 → 유령 밀린 항목 정리
@@ -347,8 +352,8 @@ function setTheme(h){ S.theme=h; applyTheme(h); save(); renderSwatches(); }
 let cur = new Date(); cur.setHours(0,0,0,0);
 function iso(d){const z=new Date(d);z.setMinutes(z.getMinutes()-z.getTimezoneOffset());return z.toISOString().slice(0,10)}
 function fromISO(s){const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
-function shift(n){cur.setDate(cur.getDate()+n);render()}
-function goToday(){cur=new Date();cur.setHours(0,0,0,0);render()}
+function shift(n){cur.setDate(cur.getDate()+n);reorder=false;render()}
+function goToday(){cur=new Date();cur.setHours(0,0,0,0);reorder=false;render()}
 function nextDow(from, dow){ const d=new Date(from); const diff=(dow - d.getDay() + 7)%7; d.setDate(d.getDate()+diff); return d; }
 const fmtDur = m=> m%60===0?`${m/60}h`:(m>60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m`);
 function fmtClock(min){ let m=((min%1440)+1440)%1440; let h=Math.floor(m/60), mm=m%60; const ap=h<12?"AM":"PM"; let hh=h%12; if(hh===0)hh=12; return `${hh}:${String(mm).padStart(2,"0")}<small>${ap}</small>`; }
@@ -466,6 +471,8 @@ function computeSchedule(previewJob){
 }
 
 /* ---------- 렌더 ---------- */
+let reorder=false, lastKeys=[];
+function moveItem(ds,key,dir){ const arr=lastKeys.slice(); const i=arr.indexOf(key); const j=i+dir; if(i<0||j<0||j>=arr.length) return; [arr[i],arr[j]]=[arr[j],arr[i]]; S.order[ds]=arr; save(); render(); }
 const esc=s=>String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 function render(){
   syncMakeup();
@@ -491,6 +498,8 @@ function render(){
     }
   });
   items.sort((a,b)=>a.dueRaw.localeCompare(b.dueRaw));
+  const ord=S.order[ds]; if(ord&&ord.length){ items.sort((a,b)=>{const ia=ord.indexOf(a.key), ib=ord.indexOf(b.key); if(ia<0&&ib<0) return 0; if(ia<0) return 1; if(ib<0) return -1; return ia-ib;}); }
+  lastKeys=items.map(i=>i.key);
   let clock=toMinutes(startFor(cur));
   items.forEach(i=>{ i.timeMin=clock; clock+=i.min; });
 
@@ -503,8 +512,8 @@ function render(){
 
   let html="";
   if(items.length){
-    html+=`<div class="section">할 일 · ${fmtClock(toMinutes(startFor(cur))).replace(/<[^>]+>/g,"")} 시작</div><div class="tl">`;
-    items.forEach(i=>{
+    html+=`<div class="section" style="display:flex;justify-content:space-between;align-items:center"><span>할 일 · ${fmtClock(toMinutes(startFor(cur))).replace(/<[^>]+>/g,"")} 시작</span><button class="pill ${reorder?"acc":""}" style="text-transform:none;letter-spacing:0;font-weight:600" onclick="reorder=!reorder;render()">${reorder?"완료":"순서 변경"}</button></div><div class="tl ${reorder?"reorder":""}">`;
+    items.forEach((i,idx)=>{
       const memo=S.memos[i.key]??i.memoDefault??"", title=S.titles[i.key]??i.title??"";
       const c=COURSES[i.course]||COURSES.etc; const subs=i.subItems||[]; const done=!!S.done[i.key];
       html+=`<div class="row ${done?"done":""}" style="--dot:${c.color}">
@@ -517,7 +526,8 @@ function render(){
             ${subs.length?`<div class="subs">${subs.map((lbl,idx)=>{const on=!!S.done[i.key+"::"+idx];return `<div class="sub-i ${on?"on":""}" onclick="toggleSub('${i.key}',${idx},${subs.length})"><i>${on?"✓":""}</i>${esc(lbl)}</div>`}).join("")}</div>`:""}
             <div class="memo" contenteditable="true" data-key="${i.key}" data-empty="${memo?0:1}" onblur="saveMemo(this)" oninput="this.dataset.empty=this.textContent.trim()?0:1">${esc(memo)}</div>
           </div>
-          ${i.type!=="recurring"?`<button class="edit-btn" onclick="openEdit('${i.type}','${i.type==="extra"?i.id:i.key.split(":").slice(1).join(":")}','${ds}')" aria-label="수정">⋯</button>`:""}
+          ${reorder?`<div class="mv"><button onclick="moveItem('${ds}','${i.key}',-1)" ${idx===0?"disabled":""}>▲</button><button onclick="moveItem('${ds}','${i.key}',1)" ${idx===items.length-1?"disabled":""}>▼</button></div>`:""}
+          ${!reorder&&i.type!=="recurring"?`<button class="edit-btn" onclick="openEdit('${i.type}','${i.type==="extra"?i.id:i.key.split(":").slice(1).join(":")}','${ds}')" aria-label="수정">⋯</button>`:""}
         </div></div>`;
     });
     html+=`</div>`;
