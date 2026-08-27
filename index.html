@@ -467,7 +467,8 @@ function generateJobs(horizonDays){
       const due=addDays(base,7*w);
       if((due-today)/86400000 > horizonDays) break;
       if(S.hiddenRec && S.hiddenRec[r.id+"@"+iso(due)]) continue;
-      jobs.push({id:r.id+"@"+iso(due), rid:r.id, dueISO:iso(due), title:r.title, course:r.course, min:r.estMin, due:iso(due), windowDays:(r.sameDay||r.doDow!=null)?0:6, allowDueDay:(r.sameDay||r.doDow!=null), fixedDate:r.doDow!=null?iso(nextDow(addDays(due,-6),r.doDow)):null, strategy:r.sameDay?"same":(r.doDow!=null?"pin":"late"), memo:r.memo, subItems:r.subItems||[], kind:"recurring", dueDow:r.dueDow});
+      const fixedD = r.doDow!=null?(r.sameDay?iso(nextDow(due,r.doDow)):iso(nextDow(addDays(due,-6),r.doDow))):null;
+      jobs.push({id:r.id+"@"+iso(due), rid:r.id, dueISO:iso(due), title:r.title, course:r.course, min:r.estMin, due:iso(due), windowDays:(r.sameDay||r.doDow!=null)?0:6, allowDueDay:!!r.sameDay||fixedD===iso(due), fixedDate:fixedD, allowAfterDue:!!r.sameDay, strategy:r.sameDay?"same":(r.doDow!=null?"pin":"late"), memo:r.memo, subItems:r.subItems||[], kind:"recurring", dueDow:r.dueDow});
     }
   });
   return jobs;
@@ -476,7 +477,7 @@ function placeJob(job, used, today){
   const due=fromISO(job.due);
   let start=addDays(due,-job.windowDays); if(start<today) start=new Date(today);
   let last=new Date(due); if(!job.allowDueDay) last=addDays(last,-1);
-  if(job.fixedDate){ let fd=fromISO(job.fixedDate); if(fd<today) fd=new Date(today); if(fd>due) fd=new Date(due); start=new Date(fd); last=new Date(fd); }
+  if(job.fixedDate){ let fd=fromISO(job.fixedDate); if(fd<today) fd=new Date(today); if(fd>due && !job.allowAfterDue) fd=new Date(due); start=new Date(fd); last=new Date(fd); }
   const days=[];
   for(let d=new Date(start); d<=last; d.setDate(d.getDate()+1)){
     const ds=iso(d); const cap=dailyCap(d); const u=used[ds]||0;
@@ -699,14 +700,14 @@ function openRecEdit(rid,dueISO,ds){
   const r=S.recurring.find(x=>x.id===rid); if(!r) return;
   recEditing={rid,dueISO,ds}; reScope="all";
   document.getElementById("reCourse").innerHTML=Object.entries(COURSES).map(([k,v])=>`<option value="${k}" ${r.course===k?"selected":""}>${v.name}</option>`).join("");
-  // 무슨 요일: 예습형이면 마감요일 전 6일 중 선택 가능, 복습형이면 마감요일 고정
+  // 무슨 요일: 예습형이면 마감요일 전 6일 중 선택, 복습형은 수업일 기준으로 며칠 뒤(밀린 복습)까지 선택 가능
   const opts=[]; const dueD=fromISO(dueISO);
-  if(r.sameDay){ opts.push([r.dueDow, `${DOW[r.dueDow]} (수업일)`]); }
-  else { for(let k=6;k>=1;k--){ const d=addDays(dueD,-k); opts.push([d.getDay(), `${DOW[d.getDay()]}`]); } }
-  const curDo = r.doDow!=null?r.doDow:(r.sameDay?r.dueDow:null);
+  if(r.sameDay){ for(let k=0;k<=3;k++){ const d=addDays(dueD,k); opts.push([d.getDay(), `${DOW[d.getDay()]}${k===0?" (수업일)":""}`]); } }
+  else { for(let k=6;k>=0;k--){ const d=addDays(dueD,-k); opts.push([d.getDay(), `${DOW[d.getDay()]}${k===0?" (수업일)":""}`]); } }
+  const curDo = r.doDow!=null?r.doDow:r.dueDow;
   document.getElementById("reDoDow").innerHTML=opts.map(([dw,lbl])=>`<option value="${dw}" ${curDo===dw?"selected":""}>${lbl}</option>`).join("") + (r.sameDay?"":`<option value="auto" ${r.doDow==null?"selected":""}>자동 (여유 있는 날)</option>`);
   document.getElementById("reTitle").value=r.title; document.getElementById("reSub").value=(r.subItems||[]).join(", ");
-  document.getElementById("reDoDow").disabled=!!r.sameDay;
+  document.getElementById("reDoDow").disabled=false;
   wHr2=Math.floor(r.estMin/60); wMr2=r.estMin%60-(r.estMin%60)%5;
   setReScope("all");
   openSheet("recEditSheet");
@@ -731,9 +732,9 @@ function saveRecEdit(){
   const dv=document.getElementById("reDoDow").value;
   if(reScope==="one"){
     // 이번 주 회차만: 해당 요일에 일회성 고정 항목으로 넣고, 이번 주 자동 인스턴스는 숨김
-    let dw = dv==="auto"? (r.sameDay?r.dueDow:fromISO(recEditing.dueISO).getDay()) : parseInt(dv);
     const dueD=fromISO(recEditing.dueISO);
-    let target=nextDow(addDays(dueD,-6),dw); if(target>dueD) target=addDays(target,-7);
+    const dw = dv==="auto" ? dueD.getDay() : parseInt(dv);
+    const target = r.sameDay ? addDays(dueD,(dw-dueD.getDay()+7)%7) : addDays(dueD,-((dueD.getDay()-dw+7)%7));
     const tISO=iso(target);
     S.hiddenRec=S.hiddenRec||{}; S.hiddenRec[recEditing.rid+"@"+recEditing.dueISO]=1;
     S.extras[tISO]=S.extras[tISO]||[];
@@ -741,7 +742,7 @@ function saveRecEdit(){
   } else {
     // 앞으로 매주: 템플릿 자체를 수정
     r.title=title; r.course=course; r.subItems=subItems; r.estMin=estMin;
-    if(!r.sameDay) r.doDow = dv==="auto"? null : parseInt(dv);
+    r.doDow = dv==="auto"? null : parseInt(dv);
   }
   save(); closeSheet("recEditSheet"); render();
 }
