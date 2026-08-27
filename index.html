@@ -221,6 +221,30 @@ textarea{min-height:64px;resize:vertical}
   </div>
 </div>
 
+<!-- 반복 항목 개별 수정 -->
+<div class="sheet-bg" id="recEditSheet" onclick="bgClose(event,'recEditSheet')">
+  <div class="sheet">
+    <div class="grab"><div class="handle"></div></div>
+    <h2>반복 일정 수정</h2>
+    <label>할 일</label><input id="reTitle">
+    <div class="r2">
+      <div><label>과목</label><select id="reCourse"></select></div>
+      <div><label>무슨 요일에 할까요</label><select id="reDoDow"></select></div>
+    </div>
+    <label>예상 소요 시간</label>
+    <div class="wheel"><div class="wheel-hl"></div><div class="wcol" id="wHr"></div><div class="wunit">시간</div><div class="wcol" id="wMr"></div><div class="wunit">분</div></div>
+    <label>세부 체크 항목 (쉼표로 구분)</label><input id="reSub">
+    <div class="preview" id="rePreview"></div>
+    <label style="margin-top:14px">적용 범위</label>
+    <div class="seg" id="reScope">
+      <button class="on" data-s="all" onclick="setReScope('all')">앞으로 매주</button>
+      <button data-s="one" onclick="setReScope('one')">이번 주만</button>
+    </div>
+    <div class="btns"><button class="b-ghost" onclick="closeSheet('recEditSheet')">취소</button><button class="b-acc" onclick="saveRecEdit()">저장</button></div>
+    <button class="b-ghost" style="width:100%;margin-top:10px;border:none;border-radius:14px;padding:13px;color:#B83232;font-weight:700;background:#FDE8E8" onclick="deleteRec()">이 반복 항목 삭제</button>
+  </div>
+</div>
+
 <!-- 할 일 목록 -->
 <div class="sheet-bg" id="assignSheet" onclick="bgClose(event,'assignSheet')">
   <div class="sheet">
@@ -313,7 +337,7 @@ function load(){
   s.activeDow=s.activeDow||{...DEFAULT_ACTIVE};
   s.studyStart=s.studyStart||DEFAULT_START; s.cutoff=s.cutoff||DEFAULT_CUTOFF; s.theme=s.theme||DEFAULT_THEME;
   if(!s.startByDow){ s.startByDow={}; [0,1,2,3,4,5,6].forEach(d=>s.startByDow[d]=(s.studyStart===DEFAULT_START&&(d===3||d===5))?"13:00":s.studyStart); }
-  s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[]; s.makeupMap=s.makeupMap||{}; s.order=s.order||{};
+  s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[]; s.makeupMap=s.makeupMap||{}; s.order=s.order||{}; s.hiddenRec=s.hiddenRec||{};
   (s.assignments).forEach(a=>{ if(a.min && !a.estMin) a.estMin=a.min; if(a.dueDayAllowed!==undefined && a.allowDueDay===undefined) a.allowDueDay=a.dueDayAllowed; });
   Object.values(s.extras).forEach(list=>list.forEach(x=>{ if(!x.estMin) x.estMin=30; }));
   // 첫 실행(또는 이전 버전에서 넘어옴): 실제로 앱을 쓴 적 없는 날은 "밀린 일"이 아님 → 유령 밀린 항목 정리
@@ -418,7 +442,8 @@ function generateJobs(horizonDays){
     for(let w=0; w<weeks; w++){
       const due=addDays(base,7*w);
       if((due-today)/86400000 > horizonDays) break;
-      jobs.push({id:r.id+"@"+iso(due), title:r.title, course:r.course, min:r.estMin, due:iso(due), windowDays:r.sameDay?0:6, allowDueDay:!!r.sameDay, strategy:r.sameDay?"same":"late", memo:r.memo, subItems:r.subItems||[], kind:"recurring", dueDow:r.dueDow});
+      if(S.hiddenRec && S.hiddenRec[r.id+"@"+iso(due)]) continue;
+      jobs.push({id:r.id+"@"+iso(due), rid:r.id, dueISO:iso(due), title:r.title, course:r.course, min:r.estMin, due:iso(due), windowDays:(r.sameDay||r.doDow!=null)?0:6, allowDueDay:(r.sameDay||r.doDow!=null), fixedDate:r.doDow!=null?iso(nextDow(addDays(due,-6),r.doDow)):null, strategy:r.sameDay?"same":(r.doDow!=null?"pin":"late"), memo:r.memo, subItems:r.subItems||[], kind:"recurring", dueDow:r.dueDow});
     }
   });
   return jobs;
@@ -427,6 +452,7 @@ function placeJob(job, used, today){
   const due=fromISO(job.due);
   let start=addDays(due,-job.windowDays); if(start<today) start=new Date(today);
   let last=new Date(due); if(!job.allowDueDay) last=addDays(last,-1);
+  if(job.fixedDate){ let fd=fromISO(job.fixedDate); if(fd<today) fd=new Date(today); if(fd>due) fd=new Date(due); start=new Date(fd); last=new Date(fd); }
   const days=[];
   for(let d=new Date(start); d<=last; d.setDate(d.getDate()+1)){
     const ds=iso(d); const cap=dailyCap(d); const u=used[ds]||0;
@@ -494,7 +520,7 @@ function render(){
       items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"assign", dueRaw:c.sortKey||c.due, tags, overflow:c.overflow, subItems:c.subItems||[]});
     } else {
       const same=c.date===c.due;
-      items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"recurring", dueRaw:c.due, tags: same?[]:[[`${DOW[c.dueDow]} 수업 대비`,"due"]], overflow:c.overflow, subItems:c.subItems||[]});
+      items.push({key:ds+":"+c.id, rid:c.rid, dueISO:c.dueISO, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"recurring", dueRaw:c.due, tags: same?[]:[[`${DOW[c.dueDow]} 수업 대비`,"due"]], overflow:c.overflow, subItems:c.subItems||[]});
     }
   });
   items.sort((a,b)=>a.dueRaw.localeCompare(b.dueRaw));
@@ -527,7 +553,7 @@ function render(){
             <div class="memo" contenteditable="true" data-key="${i.key}" data-empty="${memo?0:1}" onblur="saveMemo(this)" oninput="this.dataset.empty=this.textContent.trim()?0:1">${esc(memo)}</div>
           </div>
           ${reorder?`<div class="mv"><button onclick="moveItem('${ds}','${i.key}',-1)" ${idx===0?"disabled":""}>▲</button><button onclick="moveItem('${ds}','${i.key}',1)" ${idx===items.length-1?"disabled":""}>▼</button></div>`:""}
-          ${!reorder&&i.type!=="recurring"?`<button class="edit-btn" onclick="openEdit('${i.type}','${i.type==="extra"?i.id:i.key.split(":").slice(1).join(":")}','${ds}')" aria-label="수정">⋯</button>`:""}
+          ${!reorder?`<button class="edit-btn" onclick="${i.type==="recurring"?`openRecEdit('${i.rid}','${i.dueISO}','${ds}')`:`openEdit('${i.type}','${i.type==="extra"?i.id:i.key.split(":").slice(1).join(":")}','${ds}')`}" aria-label="수정">⋯</button>`:""}
         </div></div>`;
     });
     html+=`</div>`;
@@ -590,6 +616,65 @@ function openEdit(type,id,ds){
   document.getElementById("aDue").value=type==="extra"?ds:(obj.due||""); document.getElementById("aDueDay").value=obj.allowDueDay?"1":"0";
   document.getElementById("addTitle").textContent="할 일 수정"; document.getElementById("addSave").textContent="저장"; document.getElementById("addDelete").style.display="";
   openSheet("addSheet"); setMode(mode); setupWheels(Math.floor((obj.estMin||60)/60),(obj.estMin||60)%60 - ((obj.estMin||60)%60)%5);
+}
+/* ---------- 반복 항목 개별 수정 ---------- */
+let recEditing=null; // {rid, dueISO, ds}
+let reScope="all", wHr2=1, wMr2=0;
+function setReScope(sc){ reScope=sc; document.querySelectorAll("#reScope button").forEach(b=>b.classList.toggle("on",b.dataset.s===sc)); recPreview(); }
+function openRecEdit(rid,dueISO,ds){
+  const r=S.recurring.find(x=>x.id===rid); if(!r) return;
+  recEditing={rid,dueISO,ds}; reScope="all";
+  document.getElementById("reCourse").innerHTML=Object.entries(COURSES).map(([k,v])=>`<option value="${k}" ${r.course===k?"selected":""}>${v.name}</option>`).join("");
+  // 무슨 요일: 예습형이면 마감요일 전 6일 중 선택 가능, 복습형이면 마감요일 고정
+  const opts=[]; const dueD=fromISO(dueISO);
+  if(r.sameDay){ opts.push([r.dueDow, `${DOW[r.dueDow]} (수업일)`]); }
+  else { for(let k=6;k>=1;k--){ const d=addDays(dueD,-k); opts.push([d.getDay(), `${DOW[d.getDay()]}`]); } }
+  const curDo = r.doDow!=null?r.doDow:(r.sameDay?r.dueDow:null);
+  document.getElementById("reDoDow").innerHTML=opts.map(([dw,lbl])=>`<option value="${dw}" ${curDo===dw?"selected":""}>${lbl}</option>`).join("") + (r.sameDay?"":`<option value="auto" ${r.doDow==null?"selected":""}>자동 (여유 있는 날)</option>`);
+  document.getElementById("reTitle").value=r.title; document.getElementById("reSub").value=(r.subItems||[]).join(", ");
+  document.getElementById("reDoDow").disabled=!!r.sameDay;
+  wHr2=Math.floor(r.estMin/60); wMr2=r.estMin%60-(r.estMin%60)%5;
+  setReScope("all");
+  openSheet("recEditSheet");
+  buildWheel("wHr",HOURV,v=>v,wHr2,v=>{wHr2=v;recPreview();}); buildWheel("wMr",MINV,v=>String(v).padStart(2,"0"),wMr2,v=>{wMr2=v;recPreview();});
+  recPreview();
+}
+document.getElementById("reDoDow").addEventListener("change",recPreview);
+function recPreview(){
+  const box=document.getElementById("rePreview"); if(!recEditing) return;
+  const r=S.recurring.find(x=>x.id===recEditing.rid); if(!r) return;
+  const dv=document.getElementById("reDoDow").value;
+  if(dv==="auto"){ box.textContent="마감 요일 전, 여유 있는 날에 자동으로 배치돼요."; return; }
+  const dw=parseInt(dv);
+  box.textContent = reScope==="all" ? `앞으로 매주 ${DOW[dw]}요일에 배치돼요.` : `이번 주 ${DOW[dw]}요일에만 옮기고, 다음 주부터는 원래대로예요.`;
+}
+function saveRecEdit(){
+  const r=S.recurring.find(x=>x.id===recEditing.rid); if(!r){ closeSheet("recEditSheet"); return; }
+  const title=document.getElementById("reTitle").value.trim()||r.title;
+  const course=document.getElementById("reCourse").value;
+  const subItems=document.getElementById("reSub").value.split(",").map(s=>s.trim()).filter(Boolean);
+  const estMin=wHr2*60+wMr2||r.estMin;
+  const dv=document.getElementById("reDoDow").value;
+  if(reScope==="one"){
+    // 이번 주 회차만: 해당 요일에 일회성 고정 항목으로 넣고, 이번 주 자동 인스턴스는 숨김
+    let dw = dv==="auto"? (r.sameDay?r.dueDow:fromISO(recEditing.dueISO).getDay()) : parseInt(dv);
+    const dueD=fromISO(recEditing.dueISO);
+    let target=nextDow(addDays(dueD,-6),dw); if(target>dueD) target=addDays(target,-7);
+    const tISO=iso(target);
+    S.hiddenRec=S.hiddenRec||{}; S.hiddenRec[recEditing.rid+"@"+recEditing.dueISO]=1;
+    S.extras[tISO]=S.extras[tISO]||[];
+    S.extras[tISO].push({id:"x"+Date.now(), title, course, estMin, memo:r.memo||"", subItems});
+  } else {
+    // 앞으로 매주: 템플릿 자체를 수정
+    r.title=title; r.course=course; r.subItems=subItems; r.estMin=estMin;
+    if(!r.sameDay) r.doDow = dv==="auto"? null : parseInt(dv);
+  }
+  save(); closeSheet("recEditSheet"); render();
+}
+function deleteRec(){
+  const r=S.recurring.find(x=>x.id===recEditing.rid); if(!r) return;
+  if(!confirm(`"${r.title}" 반복 항목을 앞으로 계속 안 뜨게 지울까요?`)) return;
+  S.recurring=S.recurring.filter(x=>x.id!==recEditing.rid); save(); closeSheet("recEditSheet"); render();
 }
 function deleteEditing(){
   if(!editing) return; if(!confirm("이 할 일을 지울까요?")) return;
