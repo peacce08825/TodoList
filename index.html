@@ -143,9 +143,11 @@ textarea{min-height:64px;resize:vertical}
 .startgrid .sd b{width:18px;font-size:13px;color:var(--accent-deep)}
 .startgrid .sd input{padding:7px;font-size:13.5px;border-radius:9px;background:#fff}
 .startgrid .sd.off{opacity:.45}
-.mv{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:4px}
-.mv button{width:34px;height:30px;border-radius:9px;border:1px solid var(--line);background:var(--accent-soft);color:var(--accent-deep);font-size:13px;cursor:pointer;font-weight:700}
-.mv button:disabled{opacity:.3}
+.dragh{position:absolute;right:8px;top:8px;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--accent-soft);color:var(--accent-deep);display:grid;place-items:center;font-size:19px;cursor:grab;touch-action:none;line-height:1;user-select:none}
+.dragh:active{cursor:grabbing;background:var(--accent);color:#fff}
+.row{transition:none}
+.row.dragging{z-index:60}
+.row.dragging .card{box-shadow:0 18px 36px rgba(31,27,46,.24);opacity:.98}
 .tl.reorder .card{border-color:var(--accent);border-style:dashed;padding-right:52px;min-height:82px}
 .tl.reorder .memo,.tl.reorder .subs{display:none}
 .edit-btn{position:absolute;right:6px;top:6px;background:none;border:none;color:#C4BFD6;font-size:18px;cursor:pointer;padding:4px 8px;line-height:1}
@@ -520,7 +522,57 @@ function computeSchedule(previewJob){
 
 /* ---------- 렌더 ---------- */
 let reorder=false, lastKeys=[];
-function moveItem(ds,key,dir){ const arr=lastKeys.slice(); const i=arr.indexOf(key); const j=i+dir; if(i<0||j<0||j>=arr.length) return; [arr[i],arr[j]]=[arr[j],arr[i]]; S.order[ds]=arr; save(); render(); }
+/* ---------- 드래그로 순서 변경 ---------- */
+let drag=null;
+function dragStart(e, key){
+  if(!reorder) return;
+  const tl=document.querySelector("#main .tl"); if(!tl) return;
+  const rows=[...tl.querySelectorAll(".row")];
+  const base={}, height={};
+  rows.forEach(r=>{ base[r.dataset.key]=r.offsetTop; height[r.dataset.key]=r.offsetHeight; });
+  const startY=(e.touches?e.touches[0].clientY:e.clientY);
+  const rowEls={}; rows.forEach(r=>rowEls[r.dataset.key]=r);
+  drag={ key, curOrder:rows.map(r=>r.dataset.key), base, height, gap:10, startY, dy:0, rowEls };
+  rowEls[key].classList.add("dragging");
+  try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(err){}
+  document.addEventListener("pointermove", dragMove);
+  document.addEventListener("pointerup", dragEnd);
+  document.addEventListener("pointercancel", dragEnd);
+  if(e.cancelable) e.preventDefault();
+}
+function dragMove(e){
+  if(!drag) return;
+  const y=(e.touches?e.touches[0].clientY:e.clientY);
+  drag.dy=y-drag.startY;
+  drag.rowEls[drag.key].style.transform=`translateY(${drag.dy}px)`;
+  const draggedCenter=drag.base[drag.key]+drag.height[drag.key]/2+drag.dy;
+  const others=drag.curOrder.filter(k=>k!==drag.key);
+  let y2=0; const centers={};
+  others.forEach(k=>{ centers[k]=y2+drag.height[k]/2; y2+=drag.height[k]+drag.gap; });
+  let insertIdx=others.length;
+  for(let i=0;i<others.length;i++){ if(draggedCenter<centers[others[i]]){ insertIdx=i; break; } }
+  const newOrder=others.slice(); newOrder.splice(insertIdx,0,drag.key);
+  if(newOrder.join()!==drag.curOrder.join()){
+    drag.curOrder=newOrder;
+    let yy=0; const fullTop={};
+    drag.curOrder.forEach(k=>{ fullTop[k]=yy; yy+=drag.height[k]+drag.gap; });
+    others.forEach(k=>{
+      const el=drag.rowEls[k]; const delta=fullTop[k]-drag.base[k];
+      el.style.transition="transform .18s ease"; el.style.transform=`translateY(${delta}px)`;
+    });
+  }
+  if(e.cancelable) e.preventDefault();
+}
+function dragEnd(){
+  if(!drag) return;
+  document.removeEventListener("pointermove", dragMove);
+  document.removeEventListener("pointerup", dragEnd);
+  document.removeEventListener("pointercancel", dragEnd);
+  const ds=iso(cur);
+  S.order[ds]=drag.curOrder;
+  Object.values(drag.rowEls).forEach(el=>{ el.style.transition=""; el.style.transform=""; el.classList.remove("dragging"); });
+  drag=null; save(); render();
+}
 const esc=s=>String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 function render(){
   syncMakeup();
@@ -564,7 +616,7 @@ function render(){
     items.forEach((i,idx)=>{
       const memo=S.memos[i.key]??i.memoDefault??"", title=S.titles[i.key]??i.title??"";
       const c=COURSES[i.course]||COURSES.etc; const subs=i.subItems||[]; const done=!!S.done[i.key];
-      html+=`<div class="row ${done?"done":""}" style="--dot:${c.color}">
+      html+=`<div class="row ${done?"done":""}" data-key="${i.key}" style="--dot:${c.color}">
         <div class="rail"><time>${fmtClock(i.timeMin)}</time><small>${fmtDur(i.min)}</small></div>
         <div class="card">
           <div class="chk" onclick="toggle('${i.key}',${subs.length})">${done?"✓":""}</div>
@@ -574,7 +626,7 @@ function render(){
             ${subs.length?`<div class="subs">${subs.map((lbl,idx)=>{const on=!!S.done[i.key+"::"+idx];return `<div class="sub-i ${on?"on":""}" onclick="toggleSub('${i.key}',${idx},${subs.length})"><i>${on?"✓":""}</i>${esc(lbl)}</div>`}).join("")}</div>`:""}
             <div class="memo" contenteditable="true" data-key="${i.key}" data-empty="${memo?0:1}" onblur="saveMemo(this)" oninput="this.dataset.empty=this.textContent.trim()?0:1">${esc(memo)}</div>
           </div>
-          ${reorder?`<div class="mv"><button onclick="moveItem('${ds}','${i.key}',-1)" ${idx===0?"disabled":""}>▲</button><button onclick="moveItem('${ds}','${i.key}',1)" ${idx===items.length-1?"disabled":""}>▼</button></div>`:""}
+          ${reorder?`<button class="dragh" onpointerdown="dragStart(event,'${i.key}')" aria-label="드래그해서 순서 변경">≡</button>`:""}
           ${!reorder?`<button class="edit-btn" onclick="${i.type==="recurring"?`openRecEdit('${i.rid}','${i.dueISO}','${ds}')`:`openEdit('${i.type}','${i.type==="extra"?i.id:i.key.split(":").slice(1).join(":")}','${ds}')`}" aria-label="수정">⋯</button>`:""}
         </div></div>`;
     });
