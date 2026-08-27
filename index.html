@@ -386,6 +386,24 @@ function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; 
 
 /* ---------- 밀린 일 이월 (실제로 앱을 쓴 날만 대상) ---------- */
 function jobFullyDone(jobId){ const suf=":"+jobId; return Object.keys(S.done).some(k=>k.endsWith(suf)&&S.done[k]); }
+// jobId(회차)의 하위 항목 중 이미 체크된 인덱스들을 찾아, 남은 하위 항목/시간을 계산
+function remainingOf(jobId, subItems, estMin){
+  if(!subItems || !subItems.length) return {subItems:subItems||[], estMin, partial:false};
+  // 하위 체크 키는 "<날짜>:<jobId>::<idx>" 형태 — 날짜 프리픽스는 무엇이든 매칭
+  const doneIdx=new Set();
+  const tail="::"; const midSuf=":"+jobId;
+  Object.keys(S.done).forEach(k=>{
+    if(!S.done[k]) return;
+    const p=k.lastIndexOf(tail); if(p<0) return;
+    const base=k.slice(0,p); const idx=parseInt(k.slice(p+2),10);
+    if(base.endsWith(midSuf) && !isNaN(idx)) doneIdx.add(idx);
+  });
+  if(!doneIdx.size) return {subItems, estMin, partial:false};
+  const rem=subItems.filter((_,i)=>!doneIdx.has(i));
+  if(!rem.length) return {subItems:[], estMin:0, partial:true, allDone:true};
+  const remMin=Math.max(5, Math.round(estMin*rem.length/subItems.length/5)*5);
+  return {subItems:rem, estMin:remMin, partial:true};
+}
 function syncMakeup(){
   const today=new Date(); today.setHours(0,0,0,0);
   const tIso=iso(today);
@@ -402,8 +420,10 @@ function syncMakeup(){
       const lastWork=r.sameDay?d:addDays(d,-1);
       if(lastWork<from){ S.makeupMap[jobId]="skip"; continue; }
       if(jobFullyDone(jobId)){ S.makeupMap[jobId]="done"; continue; }
+      const rem=remainingOf(jobId, r.subItems||[], r.estMin);
+      if(rem.allDone){ S.makeupMap[jobId]="done"; continue; } // 하위 다 체크했으면 완료로 간주
       const mid="mk"+Date.now()+Math.floor(Math.random()*10000);
-      S.assignments.push({id:mid, title:r.title, course:r.course, due:dueDate(), estMin:r.estMin, memo:r.memo, allowDueDay:true, subItems:r.subItems||[], makeup:true, from:iso(d)});
+      S.assignments.push({id:mid, title:r.title, course:r.course, due:dueDate(), estMin:rem.estMin, memo:r.memo, allowDueDay:true, subItems:rem.subItems, makeup:true, from:iso(d), partial:rem.partial});
       S.makeupMap[jobId]=mid; changed=true;
     }
   });
@@ -411,8 +431,10 @@ function syncMakeup(){
     if(ds>=tIso) return;
     (S.extras[ds]||[]).forEach(t=>{
       if(S.done[ds+":"+t.id]) return;
+      const rem=remainingOf(ds+":"+t.id, t.subItems||[], t.estMin);
+      if(rem.allDone) return; // 하위 다 체크 → 이월 안 함
       const mid="mk"+Date.now()+Math.floor(Math.random()*10000);
-      S.assignments.push({id:mid, title:t.title, course:t.course, due:dueDate(), estMin:t.estMin, memo:t.memo, allowDueDay:true, subItems:t.subItems||[], makeup:true, from:ds});
+      S.assignments.push({id:mid, title:t.title, course:t.course, due:dueDate(), estMin:rem.estMin, memo:t.memo, allowDueDay:true, subItems:rem.subItems, makeup:true, from:ds, partial:rem.partial});
       changed=true;
     });
     delete S.extras[ds]; changed=true;
@@ -429,10 +451,10 @@ function generateJobs(horizonDays){
   const jobs=[];
   S.assignments.forEach(a=>{
     if(a.due){
-      jobs.push({id:a.id, title:a.title, course:a.course, min:a.estMin, due:a.due, windowDays:99999, allowDueDay:!!a.allowDueDay, strategy:"spread", memo:a.memo, subItems:a.subItems||[], makeup:!!a.makeup, kind:"assign"});
+      jobs.push({id:a.id, title:a.title, course:a.course, min:a.estMin, due:a.due, windowDays:99999, allowDueDay:!!a.allowDueDay, strategy:"spread", memo:a.memo, subItems:a.subItems||[], makeup:!!a.makeup, partial:!!a.partial, from:a.from, kind:"assign"});
     } else {
       // 빈 시간에 자동: 오늘부터 14일 안에서 가장 빠른 빈 시간
-      jobs.push({id:a.id, title:a.title, course:a.course, min:a.estMin, due:iso(addDays(today,14)), windowDays:14, allowDueDay:true, strategy:"early", memo:a.memo, subItems:a.subItems||[], makeup:!!a.makeup, auto:true, kind:"assign", sortKey:iso(today)});
+      jobs.push({id:a.id, title:a.title, course:a.course, min:a.estMin, due:iso(addDays(today,14)), windowDays:14, allowDueDay:true, strategy:"early", memo:a.memo, subItems:a.subItems||[], makeup:!!a.makeup, partial:!!a.partial, from:a.from, auto:true, kind:"assign", sortKey:iso(today)});
     }
   });
   const weeks=Math.ceil(horizonDays/7)+1;
@@ -514,7 +536,7 @@ function render(){
     if(c.kind==="assign"){
       const due=fromISO(c.due); const left=Math.round((due-cur)/86400000);
       const tags=[];
-      if(c.makeup){ const f=c.from?fromISO(c.from):null; tags.push([`⏰ 밀림${f?` · ${f.getMonth()+1}/${f.getDate()}`:""}`,"late"]); }
+      if(c.makeup){ const f=c.from?fromISO(c.from):null; tags.push([`⏰ 밀림${c.partial?" · 남은 부분":""}${f?` · ${f.getMonth()+1}/${f.getDate()}`:""}`,"late"]); }
       else if(c.auto) tags.push(["✨ 자동",""]);
       else tags.push([`마감 ${due.getMonth()+1}/${due.getDate()}`, left<=1?"late":"due"]);
       items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"assign", dueRaw:c.sortKey||c.due, tags, overflow:c.overflow, subItems:c.subItems||[]});
