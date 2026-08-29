@@ -429,17 +429,19 @@ function syncMakeup(){
       S.makeupMap[jobId]=mid; changed=true;
     }
   });
+  // 이 날 할 일(extras): 지난 날짜는 그대로 남겨두고(완료한 건 흐리게 보임), 못 끝낸 것만 복사해서 밀린 항목으로
   Object.keys(S.extras).forEach(ds=>{
     if(ds>=tIso) return;
     (S.extras[ds]||[]).forEach(t=>{
-      if(S.done[ds+":"+t.id]) return;
-      const rem=remainingOf(ds+":"+t.id, t.subItems||[], t.estMin);
-      if(rem.allDone) return; // 하위 다 체크 → 이월 안 함
+      const mkey=ds+":"+t.id;
+      if(S.makeupMap[mkey]) return; // 이미 처리한 적 있음
+      if(S.done[mkey]){ S.makeupMap[mkey]="done"; return; }
+      const rem=remainingOf(t.id, t.subItems||[], t.estMin);
+      if(rem.allDone){ S.makeupMap[mkey]="done"; return; } // 하위 다 체크 → 이월 안 함
       const mid="mk"+Date.now()+Math.floor(Math.random()*10000);
       S.assignments.push({id:mid, title:t.title, course:t.course, due:dueDate(), estMin:rem.estMin, memo:t.memo, allowDueDay:true, subItems:rem.subItems, makeup:true, from:ds, partial:rem.partial});
-      changed=true;
+      S.makeupMap[mkey]=mid; changed=true;
     });
-    delete S.extras[ds]; changed=true;
   });
   S.lastSyncDate=tIso; save();
 }
@@ -460,6 +462,11 @@ function generateJobs(horizonDays){
     }
   });
   const weeks=Math.ceil(horizonDays/7)+1;
+  const mkRec=(r,due,isPast)=>{
+    const dueISO=iso(due);
+    const fixedD = r.doDow!=null?(r.sameDay?iso(nextDow(due,r.doDow)):iso(nextDow(addDays(due,-6),r.doDow))):null;
+    return {id:r.id+"@"+dueISO, rid:r.id, dueISO, title:r.title, course:r.course, min:r.estMin, due:dueISO, windowDays:(r.sameDay||r.doDow!=null)?0:6, allowDueDay:!!r.sameDay||fixedD===dueISO, fixedDate:fixedD, allowAfterDue:!!r.sameDay, strategy:r.sameDay?"same":(r.doDow!=null?"pin":"late"), memo:r.memo, subItems:r.subItems||[], kind:"recurring", dueDow:r.dueDow, isPast:!!isPast};
+  };
   S.recurring.forEach(r=>{
     let base=nextDow(today, r.dueDow);
     if(!r.sameDay && base<=today) base.setDate(base.getDate()+7);
@@ -467,17 +474,24 @@ function generateJobs(horizonDays){
       const due=addDays(base,7*w);
       if((due-today)/86400000 > horizonDays) break;
       if(S.hiddenRec && S.hiddenRec[r.id+"@"+iso(due)]) continue;
-      const fixedD = r.doDow!=null?(r.sameDay?iso(nextDow(due,r.doDow)):iso(nextDow(addDays(due,-6),r.doDow))):null;
-      jobs.push({id:r.id+"@"+iso(due), rid:r.id, dueISO:iso(due), title:r.title, course:r.course, min:r.estMin, due:iso(due), windowDays:(r.sameDay||r.doDow!=null)?0:6, allowDueDay:!!r.sameDay||fixedD===iso(due), fixedDate:fixedD, allowAfterDue:!!r.sameDay, strategy:r.sameDay?"same":(r.doDow!=null?"pin":"late"), memo:r.memo, subItems:r.subItems||[], kind:"recurring", dueDow:r.dueDow});
+      jobs.push(mkRec(r,due,false));
+    }
+    // 지난 회차도 생성 (뒤로 가서 조회할 수 있게 — 완료/미완료 기록 보존용)
+    let d=addDays(today,-35);
+    const diff=(r.dueDow-d.getDay()+7)%7; d.setDate(d.getDate()+diff);
+    for(; d<today; d.setDate(d.getDate()+7)){
+      if(S.hiddenRec && S.hiddenRec[r.id+"@"+iso(d)]) continue;
+      jobs.push(mkRec(r,new Date(d),true));
     }
   });
   return jobs;
 }
 function placeJob(job, used, today){
   const due=fromISO(job.due);
-  let start=addDays(due,-job.windowDays); if(start<today) start=new Date(today);
+  const floor = job.isPast ? new Date(2000,0,1) : today;
+  let start=addDays(due,-job.windowDays); if(start<floor) start=new Date(floor);
   let last=new Date(due); if(!job.allowDueDay) last=addDays(last,-1);
-  if(job.fixedDate){ let fd=fromISO(job.fixedDate); if(fd<today) fd=new Date(today); if(fd>due && !job.allowAfterDue) fd=new Date(due); start=new Date(fd); last=new Date(fd); }
+  if(job.fixedDate){ let fd=fromISO(job.fixedDate); if(fd<floor) fd=new Date(floor); if(fd>due && !job.allowAfterDue) fd=new Date(due); start=new Date(fd); last=new Date(fd); }
   const days=[];
   for(let d=new Date(start); d<=last; d.setDate(d.getDate()+1)){
     const ds=iso(d); const cap=dailyCap(d); const u=used[ds]||0;
@@ -499,8 +513,8 @@ function placeJob(job, used, today){
     for(const d of days){ if(need<=0)break; take(d,Math.min(need,d.free)); }
   }
   let overflow=0;
-  if(need>0){
-    let od=new Date(due); if(!job.allowDueDay) od=addDays(od,-1); if(od<today||job.strategy==="early") od=new Date(today);
+  if(need>0 && !job.isPast){
+    let od=new Date(due); if(!job.allowDueDay) od=addDays(od,-1); if(od<floor||job.strategy==="early") od=new Date(floor);
     const ds=iso(od); const ex=chunks.find(c=>c.date===ds); if(ex) ex.min+=need; else chunks.push({date:ds,min:need}); used[ds]=(used[ds]||0)+need; overflow=need; need=0;
   }
   chunks.sort((a,b)=>a.date.localeCompare(b.date));
