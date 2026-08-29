@@ -492,9 +492,15 @@ function generateJobs(horizonDays){
 function placeJob(job, used, today){
   const due=fromISO(job.due);
   const floor = job.isPast ? new Date(2000,0,1) : today;
+  if(job.fixedDate){
+    // 요일을 직접 지정한 경우: 그 요일이 쉬는 날/자리 부족이어도 무조건 그 날짜에 배치하고, 넘치면 경고만 표시
+    let fd=fromISO(job.fixedDate); if(fd<floor) fd=new Date(floor); if(fd>due && !job.allowAfterDue) fd=new Date(due);
+    const ds=iso(fd); const before=used[ds]||0; used[ds]=before+job.min;
+    const cap=dailyCap(fd); const overflow=Math.max(0,(before+job.min)-cap);
+    return {chunks:[{date:ds,min:job.min}], overflow};
+  }
   let start=addDays(due,-job.windowDays); if(start<floor) start=new Date(floor);
   let last=new Date(due); if(!job.allowDueDay) last=addDays(last,-1);
-  if(job.fixedDate){ let fd=fromISO(job.fixedDate); if(fd<floor) fd=new Date(floor); if(fd>due && !job.allowAfterDue) fd=new Date(due); start=new Date(fd); last=new Date(fd); }
   const days=[];
   for(let d=new Date(start); d<=last; d.setDate(d.getDate()+1)){
     const ds=iso(d); const cap=dailyCap(d); const u=used[ds]||0;
@@ -744,6 +750,8 @@ function recPreview(){
   const today=new Date(); today.setHours(0,0,0,0);
   if(fixedD<today){
     box.textContent=`이번 주는 ${DOW[dw]}요일이 이미 지나서 자동으로 여유 있는 날에 배치되고, 다음 주 ${DOW[dw]}요일부터 정확히 적용돼요.`;
+  } else if(!S.activeDow[dw]){
+    box.textContent=`${DOW[dw]}요일은 쉬는 날로 설정돼 있어요. 그래도 이 항목은 매주 ${DOW[dw]}요일에 배치할게요 — 쉬는 날 시간을 쓰는 거라 "⚠ 시간 부족" 표시가 붙어요.`;
   } else {
     box.textContent=`앞으로 매주 ${DOW[dw]}요일에 배치돼요. (이번 주도 바로 적용돼요)`;
   }
