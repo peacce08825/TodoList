@@ -465,7 +465,10 @@ function generateJobs(horizonDays){
   const mkRec=(r,due,isPast)=>{
     const dueISO=iso(due);
     const fixedD = r.doDow!=null?(r.sameDay?iso(nextDow(due,r.doDow)):iso(nextDow(addDays(due,-6),r.doDow))):null;
-    return {id:r.id+"@"+dueISO, rid:r.id, dueISO, title:r.title, course:r.course, min:r.estMin, due:dueISO, windowDays:(r.sameDay||r.doDow!=null)?0:6, allowDueDay:!!r.sameDay||fixedD===dueISO, fixedDate:fixedD, allowAfterDue:!!r.sameDay, strategy:r.sameDay?"same":(r.doDow!=null?"pin":"late"), memo:r.memo, subItems:r.subItems||[], kind:"recurring", dueDow:r.dueDow, isPast:!!isPast};
+    // 고른 요일이 이번 주엔 이미 지났으면(과거 회차가 아닌데도) 이번 주만 자동배치로 대체 — 다음 주부터 정확히 적용
+    const skipFixed = !isPast && fixedD && fromISO(fixedD)<today;
+    const useFixed = fixedD && !skipFixed;
+    return {id:r.id+"@"+dueISO, rid:r.id, dueISO, title:r.title, course:r.course, min:r.estMin, due:dueISO, windowDays:useFixed?0:(r.sameDay?0:6), allowDueDay:useFixed?(!!r.sameDay||fixedD===dueISO):!!r.sameDay, fixedDate:useFixed?fixedD:null, allowAfterDue:!!r.sameDay, strategy:useFixed?(r.sameDay?"same":"pin"):(r.sameDay?"same":"late"), memo:r.memo, subItems:r.subItems||[], kind:"recurring", dueDow:r.dueDow, isPast:!!isPast};
   };
   S.recurring.forEach(r=>{
     let base=nextDow(today, r.dueDow);
@@ -735,7 +738,15 @@ function recPreview(){
   const dv=document.getElementById("reDoDow").value;
   if(dv==="auto"){ box.textContent="마감 요일 전, 여유 있는 날에 자동으로 배치돼요."; return; }
   const dw=parseInt(dv);
-  box.textContent = reScope==="all" ? `앞으로 매주 ${DOW[dw]}요일에 배치돼요.` : `이번 주 ${DOW[dw]}요일에만 옮기고, 다음 주부터는 원래대로예요.`;
+  if(reScope==="one"){ box.textContent=`이번 주 ${DOW[dw]}요일에만 옮기고, 다음 주부터는 원래대로예요.`; return; }
+  const dueD=fromISO(recEditing.dueISO);
+  const fixedD = r.sameDay ? nextDow(dueD,dw) : nextDow(addDays(dueD,-6),dw);
+  const today=new Date(); today.setHours(0,0,0,0);
+  if(fixedD<today){
+    box.textContent=`이번 주는 ${DOW[dw]}요일이 이미 지나서 자동으로 여유 있는 날에 배치되고, 다음 주 ${DOW[dw]}요일부터 정확히 적용돼요.`;
+  } else {
+    box.textContent=`앞으로 매주 ${DOW[dw]}요일에 배치돼요. (이번 주도 바로 적용돼요)`;
+  }
 }
 function saveRecEdit(){
   const r=S.recurring.find(x=>x.id===recEditing.rid); if(!r){ closeSheet("recEditSheet"); return; }
