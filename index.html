@@ -340,11 +340,14 @@ function load(){
   s.studyStart=s.studyStart||DEFAULT_START; s.cutoff=s.cutoff||DEFAULT_CUTOFF; s.theme=s.theme||DEFAULT_THEME;
   if(!s.startByDow){ s.startByDow={}; [0,1,2,3,4,5,6].forEach(d=>s.startByDow[d]=(s.studyStart===DEFAULT_START&&(d===3||d===5))?"13:00":s.studyStart); }
   s.done=s.done||{}; s.memos=s.memos||{}; s.titles=s.titles||{}; s.extras=s.extras||{}; s.assignments=s.assignments||[]; s.makeupMap=s.makeupMap||{}; s.order=s.order||{}; s.hiddenRec=s.hiddenRec||{};
+  // 예전 버전은 완료/메모/제목을 "날짜:아이디" 형식으로 저장했음 → 날짜가 바뀌어도 안 끊기게 "아이디" 단독 형식으로 이전
+  const migrateKeyMap=(obj)=>{ const out={}; Object.keys(obj).forEach(k=>{ const m=k.match(/^\d{4}-\d{2}-\d{2}:(.+)$/); out[m?m[1]:k]=obj[k]; }); return out; };
+  s.done=migrateKeyMap(s.done); s.memos=migrateKeyMap(s.memos); s.titles=migrateKeyMap(s.titles);
   (s.assignments).forEach(a=>{ if(a.min && !a.estMin) a.estMin=a.min; if(a.dueDayAllowed!==undefined && a.allowDueDay===undefined) a.allowDueDay=a.dueDayAllowed; });
   Object.values(s.extras).forEach(list=>list.forEach(x=>{ if(!x.estMin) x.estMin=30; }));
   // 첫 실행(또는 이전 버전에서 넘어옴): 실제로 앱을 쓴 적 없는 날은 "밀린 일"이 아님 → 유령 밀린 항목 정리
   if(!s.lastSyncDate){
-    const hasDone=id=>Object.keys(s.done).some(k=>k.endsWith(":"+id)&&s.done[k]);
+    const hasDone=id=>!!s.done[id];
     s.assignments=s.assignments.filter(a=>!(a.makeup && !hasDone(a.id)));
     s.makeupMap={};
     s.lastSyncDate=todayISO();
@@ -387,30 +390,34 @@ function toMinutes(hhmm){ const [h,m]=hhmm.split(":").map(Number); return h*60+m
 function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
 
 /* ---------- 밀린 일 이월 (실제로 앱을 쓴 날만 대상) ---------- */
-function jobFullyDone(jobId){ const suf=":"+jobId; return Object.keys(S.done).some(k=>k.endsWith(suf)&&S.done[k]); }
+const APP_START="2026-08-24"; // 이 날짜 이전은 실제로 쓴 적 없는 기간 — 과거 조회/이월 대상에서 제외
+function jobFullyDone(jobId){ return !!S.done[jobId]; }
 // jobId(회차)의 하위 항목 중 이미 체크된 인덱스들을 찾아, 남은 하위 항목/시간을 계산
 function remainingOf(jobId, subItems, estMin){
   if(!subItems || !subItems.length) return {subItems:subItems||[], estMin, partial:false};
-  // 하위 체크 키는 "<날짜>:<jobId>::<idx>" 형태 — 날짜 프리픽스는 무엇이든 매칭
   const doneIdx=new Set();
-  const tail="::"; const midSuf=":"+jobId;
-  Object.keys(S.done).forEach(k=>{
-    if(!S.done[k]) return;
-    const p=k.lastIndexOf(tail); if(p<0) return;
-    const base=k.slice(0,p); const idx=parseInt(k.slice(p+2),10);
-    if(base.endsWith(midSuf) && !isNaN(idx)) doneIdx.add(idx);
-  });
+  subItems.forEach((_,i)=>{ if(S.done[jobId+"::"+i]) doneIdx.add(i); });
   if(!doneIdx.size) return {subItems, estMin, partial:false};
   const rem=subItems.filter((_,i)=>!doneIdx.has(i));
   if(!rem.length) return {subItems:[], estMin:0, partial:true, allDone:true};
   const remMin=Math.max(5, Math.round(estMin*rem.length/subItems.length/5)*5);
   return {subItems:rem, estMin:remMin, partial:true};
 }
+// 원래 항목(jobId)을 완료 처리했을 때, 이미 만들어진 밀린(makeup) 항목이 있으면 같이 지운다
+function cancelMakeupFor(jobId){
+  const mid=S.makeupMap[jobId];
+  if(mid && mid!=="done" && mid!=="skip"){
+    S.assignments=S.assignments.filter(a=>a.id!==mid);
+  }
+  if(S.makeupMap[jobId]!==undefined) S.makeupMap[jobId]="done";
+}
 function syncMakeup(){
   const today=new Date(); today.setHours(0,0,0,0);
   const tIso=iso(today);
   if(S.lastSyncDate>=tIso) return;
+  const startFloor=fromISO(APP_START);
   let from=fromISO(S.lastSyncDate); if(today-from>14*86400000) from=addDays(today,-14);
+  if(from<startFloor) from=new Date(startFloor);
   let changed=false;
   const dueDate=()=>iso(addDays(today,3));
   S.recurring.forEach(r=>{
@@ -425,22 +432,25 @@ function syncMakeup(){
       const rem=remainingOf(jobId, r.subItems||[], r.estMin);
       if(rem.allDone){ S.makeupMap[jobId]="done"; continue; } // 하위 다 체크했으면 완료로 간주
       const mid="mk"+Date.now()+Math.floor(Math.random()*10000);
-      S.assignments.push({id:mid, title:r.title, course:r.course, due:dueDate(), estMin:rem.estMin, memo:r.memo, allowDueDay:true, subItems:rem.subItems, makeup:true, from:iso(d), partial:rem.partial});
+      const memo = S.memos[jobId] ?? r.memo;
+      const title = S.titles[jobId] ?? r.title;
+      S.assignments.push({id:mid, title, course:r.course, due:dueDate(), estMin:rem.estMin, memo, allowDueDay:true, subItems:rem.subItems, makeup:true, from:iso(d), partial:rem.partial});
       S.makeupMap[jobId]=mid; changed=true;
     }
   });
   // 이 날 할 일(extras): 지난 날짜는 그대로 남겨두고(완료한 건 흐리게 보임), 못 끝낸 것만 복사해서 밀린 항목으로
   Object.keys(S.extras).forEach(ds=>{
-    if(ds>=tIso) return;
+    if(ds>=tIso || ds<APP_START) return;
     (S.extras[ds]||[]).forEach(t=>{
-      const mkey=ds+":"+t.id;
-      if(S.makeupMap[mkey]) return; // 이미 처리한 적 있음
-      if(S.done[mkey]){ S.makeupMap[mkey]="done"; return; }
+      if(S.makeupMap[t.id]) return; // 이미 처리한 적 있음
+      if(S.done[t.id]){ S.makeupMap[t.id]="done"; return; }
       const rem=remainingOf(t.id, t.subItems||[], t.estMin);
-      if(rem.allDone){ S.makeupMap[mkey]="done"; return; } // 하위 다 체크 → 이월 안 함
+      if(rem.allDone){ S.makeupMap[t.id]="done"; return; } // 하위 다 체크 → 이월 안 함
       const mid="mk"+Date.now()+Math.floor(Math.random()*10000);
-      S.assignments.push({id:mid, title:t.title, course:t.course, due:dueDate(), estMin:rem.estMin, memo:t.memo, allowDueDay:true, subItems:rem.subItems, makeup:true, from:ds, partial:rem.partial});
-      S.makeupMap[mkey]=mid; changed=true;
+      const memo = S.memos[t.id] ?? t.memo;
+      const title = S.titles[t.id] ?? t.title;
+      S.assignments.push({id:mid, title, course:t.course, due:dueDate(), estMin:rem.estMin, memo, allowDueDay:true, subItems:rem.subItems, makeup:true, from:ds, partial:rem.partial});
+      S.makeupMap[t.id]=mid; changed=true;
     });
   });
   S.lastSyncDate=tIso; save();
@@ -479,8 +489,8 @@ function generateJobs(horizonDays){
       if(S.hiddenRec && S.hiddenRec[r.id+"@"+iso(due)]) continue;
       jobs.push(mkRec(r,due,false));
     }
-    // 지난 회차도 생성 (뒤로 가서 조회할 수 있게 — 완료/미완료 기록 보존용)
-    let d=addDays(today,-35);
+    // 지난 회차도 생성 (뒤로 가서 조회할 수 있게 — 완료/미완료 기록 보존용). 실제로 쓰기 시작한 날(APP_START) 이전은 제외
+    let d=addDays(today,-35); const startFloor=fromISO(APP_START); if(d<startFloor) d=new Date(startFloor);
     const diff=(r.dueDow-d.getDay()+7)%7; d.setDate(d.getDate()+diff);
     for(; d<today; d.setDate(d.getDate()+7)){
       if(S.hiddenRec && S.hiddenRec[r.id+"@"+iso(d)]) continue;
@@ -491,7 +501,7 @@ function generateJobs(horizonDays){
 }
 function placeJob(job, used, today){
   const due=fromISO(job.due);
-  const floor = job.isPast ? new Date(2000,0,1) : today;
+  const floor = job.isPast ? fromISO(APP_START) : today;
   if(job.fixedDate){
     // 요일을 직접 지정한 경우: 그 요일이 쉬는 날/자리 부족이어도 무조건 그 날짜에 배치하고, 넘치면 경고만 표시
     let fd=fromISO(job.fixedDate); if(fd<floor) fd=new Date(floor); if(fd>due && !job.allowAfterDue) fd=new Date(due);
@@ -607,7 +617,7 @@ function render(){
 
   const sched=computeSchedule();
   const items=[];
-  (S.extras[ds]||[]).forEach(t=>items.push({key:ds+":"+t.id, course:t.course, title:t.title, memoDefault:t.memo, min:t.estMin, type:"extra", id:t.id, dueRaw:ds, tags:[["📌 고정",""]], subItems:t.subItems||[]}));
+  (S.extras[ds]||[]).forEach(t=>items.push({key:t.id, course:t.course, title:t.title, memoDefault:t.memo, min:t.estMin, type:"extra", id:t.id, dueRaw:ds, tags:[["📌 고정",""]], subItems:t.subItems||[]}));
   sched.filter(c=>c.date===ds).forEach(c=>{
     if(c.kind==="assign"){
       const due=fromISO(c.due); const left=Math.round((due-cur)/86400000);
@@ -615,10 +625,10 @@ function render(){
       if(c.makeup){ const f=c.from?fromISO(c.from):null; tags.push([`⏰ 밀림${c.partial?" · 남은 부분":""}${f?` · ${f.getMonth()+1}/${f.getDate()}`:""}`,"late"]); }
       else if(c.auto) tags.push(["✨ 자동",""]);
       else tags.push([`마감 ${due.getMonth()+1}/${due.getDate()}`, left<=1?"late":"due"]);
-      items.push({key:ds+":"+c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"assign", dueRaw:c.sortKey||c.due, tags, overflow:c.overflow, subItems:c.subItems||[]});
+      items.push({key:c.id, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"assign", dueRaw:c.sortKey||c.due, tags, overflow:c.overflow, subItems:c.subItems||[]});
     } else {
       const same=c.date===c.due;
-      items.push({key:ds+":"+c.id, rid:c.rid, dueISO:c.dueISO, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"recurring", dueRaw:c.due, tags: same?[]:[[`${DOW[c.dueDow]} 수업 대비`,"due"]], overflow:c.overflow, subItems:c.subItems||[]});
+      items.push({key:c.id, rid:c.rid, dueISO:c.dueISO, course:c.course, title:c.title, memoDefault:c.memo, min:c.min, type:"recurring", dueRaw:c.due, tags: same?[]:[[`${DOW[c.dueDow]} 수업 대비`,"due"]], overflow:c.overflow, subItems:c.subItems||[]});
     }
   });
   items.sort((a,b)=>a.dueRaw.localeCompare(b.dueRaw));
@@ -651,7 +661,7 @@ function render(){
             <div class="memo" contenteditable="true" data-key="${i.key}" data-empty="${memo?0:1}" onblur="saveMemo(this)" oninput="this.dataset.empty=this.textContent.trim()?0:1">${esc(memo)}</div>
           </div>
           ${reorder?`<button class="dragh" onpointerdown="dragStart(event,'${i.key}')" aria-label="드래그해서 순서 변경">≡</button>`:""}
-          ${!reorder?`<button class="edit-btn" onclick="${i.type==="recurring"?`openRecEdit('${i.rid}','${i.dueISO}','${ds}')`:`openEdit('${i.type}','${i.type==="extra"?i.id:i.key.split(":").slice(1).join(":")}','${ds}')`}" aria-label="수정">⋯</button>`:""}
+          ${!reorder?`<button class="edit-btn" onclick="${i.type==="recurring"?`openRecEdit('${i.rid}','${i.dueISO}','${ds}')`:`openEdit('${i.type}','${i.key}','${ds}')`}" aria-label="수정">⋯</button>`:""}
         </div></div>`;
     });
     html+=`</div>`;
@@ -662,8 +672,8 @@ function render(){
   }
   document.getElementById("main").innerHTML=html;
 }
-function toggle(k, n){ const on=!S.done[k]; if(on) S.done[k]=1; else delete S.done[k]; if(n){ for(let i=0;i<n;i++){ const sk=k+"::"+i; if(on) S.done[sk]=1; else delete S.done[sk]; } } save(); render(); }
-function toggleSub(k, idx, n){ const sk=k+"::"+idx; if(S.done[sk]) delete S.done[sk]; else S.done[sk]=1; let all=true; for(let i=0;i<n;i++){ if(!S.done[k+"::"+i]){all=false;break;} } if(all) S.done[k]=1; else delete S.done[k]; save(); render(); }
+function toggle(k, n){ const on=!S.done[k]; if(on) S.done[k]=1; else delete S.done[k]; if(n){ for(let i=0;i<n;i++){ const sk=k+"::"+i; if(on) S.done[sk]=1; else delete S.done[sk]; } } if(on) cancelMakeupFor(k); save(); render(); }
+function toggleSub(k, idx, n){ const sk=k+"::"+idx; if(S.done[sk]) delete S.done[sk]; else S.done[sk]=1; let all=true; for(let i=0;i<n;i++){ if(!S.done[k+"::"+i]){all=false;break;} } if(all){ S.done[k]=1; cancelMakeupFor(k); } else delete S.done[k]; save(); render(); }
 function saveMemo(el){ S.memos[el.dataset.key]=el.textContent.trim(); save(); }
 function saveTitle(el){ const v=el.textContent.trim(); if(v) S.titles[el.dataset.key]=v; else { delete S.titles[el.dataset.key]; el.textContent=el.dataset.default; } save(); }
 function delExtra(ds,id){ S.extras[ds]=(S.extras[ds]||[]).filter(t=>t.id!==id); save(); render(); }
@@ -709,7 +719,7 @@ function openEdit(type,id,ds){
   else { obj=S.assignments.find(a=>a.id===id); mode=obj&&obj.due?"due":"auto"; }
   if(!obj) return;
   editing={type,id,ds};
-  document.getElementById("aTitle").value=obj.title||""; document.getElementById("aMemo").value=obj.memo||"";
+  document.getElementById("aTitle").value=S.titles[id] ?? obj.title ?? ""; document.getElementById("aMemo").value=S.memos[id] ?? obj.memo ?? "";
   document.getElementById("aSub").value=(obj.subItems||[]).join(", "); document.getElementById("aCourse").value=obj.course||"etc";
   document.getElementById("aDue").value=type==="extra"?ds:(obj.due||""); document.getElementById("aDueDay").value=obj.allowDueDay?"1":"0";
   document.getElementById("addTitle").textContent="할 일 수정"; document.getElementById("addSave").textContent="저장"; document.getElementById("addDelete").style.display="";
@@ -729,7 +739,7 @@ function openRecEdit(rid,dueISO,ds){
   else { for(let k=6;k>=0;k--){ const d=addDays(dueD,-k); opts.push([d.getDay(), `${DOW[d.getDay()]}${k===0?" (수업일)":""}`]); } }
   const curDo = r.doDow!=null?r.doDow:r.dueDow;
   document.getElementById("reDoDow").innerHTML=opts.map(([dw,lbl])=>`<option value="${dw}" ${curDo===dw?"selected":""}>${lbl}</option>`).join("") + (r.sameDay?"":`<option value="auto" ${r.doDow==null?"selected":""}>자동 (여유 있는 날)</option>`);
-  document.getElementById("reTitle").value=r.title; document.getElementById("reSub").value=(r.subItems||[]).join(", ");
+  document.getElementById("reTitle").value=S.titles[recEditing.rid+"@"+recEditing.dueISO] ?? r.title; document.getElementById("reSub").value=(r.subItems||[]).join(", ");
   document.getElementById("reDoDow").disabled=false;
   wHr2=Math.floor(r.estMin/60); wMr2=r.estMin%60-(r.estMin%60)%5;
   setReScope("all");
@@ -771,7 +781,7 @@ function saveRecEdit(){
     const tISO=iso(target);
     S.hiddenRec=S.hiddenRec||{}; S.hiddenRec[recEditing.rid+"@"+recEditing.dueISO]=1;
     S.extras[tISO]=S.extras[tISO]||[];
-    S.extras[tISO].push({id:"x"+Date.now(), title, course, estMin, memo:r.memo||"", subItems});
+    S.extras[tISO].push({id:"x"+Date.now(), title, course, estMin, memo:(S.memos[recEditing.rid+"@"+recEditing.dueISO] ?? r.memo ?? ""), subItems});
   } else {
     // 앞으로 매주: 템플릿 자체를 수정
     r.title=title; r.course=course; r.subItems=subItems; r.estMin=estMin;
@@ -815,6 +825,7 @@ function saveAdd(){
     if(editing.type==="extra") S.extras[editing.ds]=(S.extras[editing.ds]||[]).filter(t=>t.id!==editing.id);
     else { const old=S.assignments.find(a=>a.id===editing.id); keepMakeup=!!(old&&old.makeup); S.assignments=S.assignments.filter(a=>a.id!==editing.id); }
     keepId=editing.id; editing=null;
+    delete S.memos[keepId]; delete S.titles[keepId]; // 방금 입력한 값이 최신이므로 예전 인라인 수정값은 정리
   }
   if(addMode==="pin"){ const ds=document.getElementById("aDue").value||iso(cur); S.extras[ds]=S.extras[ds]||[]; S.extras[ds].push({id:keepId||("x"+Date.now()), title, course, estMin:min, memo, subItems}); }
   else if(addMode==="due"){ const due=document.getElementById("aDue").value; if(!due){ alert("마감일을 넣어주세요."); return; } S.assignments.push({id:keepId||("a"+Date.now()), title, course, due, estMin:min, memo, allowDueDay:document.getElementById("aDueDay").value==="1", subItems, makeup:keepMakeup}); }
